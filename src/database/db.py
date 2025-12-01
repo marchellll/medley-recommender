@@ -1,0 +1,142 @@
+"""Database connection and utilities."""
+
+import asyncio
+from pathlib import Path
+from typing import Optional
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import selectinload
+
+from src.database.models import Base, Song
+from src.utils.config import settings
+
+
+# Create async engine
+engine = create_async_engine(
+    f"sqlite+aiosqlite:///{settings.database_path_resolved}",
+    echo=False,
+    future=True,
+)
+
+# Create async session factory
+AsyncSessionLocal = async_sessionmaker(
+    engine, class_=AsyncSession, expire_on_commit=False
+)
+
+
+async def init_db() -> None:
+    """Initialize database tables."""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
+async def get_session() -> AsyncSession:
+    """Get async database session."""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
+
+
+async def get_song(session: AsyncSession, song_id: str) -> Optional[Song]:
+    """Get a song by ID."""
+    from sqlalchemy import select
+
+    result = await session.execute(select(Song).where(Song.song_id == song_id))
+    return result.scalar_one_or_none()
+
+
+async def create_or_update_song(
+    session: AsyncSession,
+    song_id: str,
+    title: str,
+    artist: str,
+    youtube_url: str,
+    lyrics: str,
+    **kwargs,
+) -> Song:
+    """Create or update a song."""
+    song = await get_song(session, song_id)
+    if song:
+        # Update existing song
+        song.title = title
+        song.artist = artist
+        song.youtube_url = youtube_url
+        song.lyrics = lyrics
+        for key, value in kwargs.items():
+            if hasattr(song, key):
+                setattr(song, key, value)
+    else:
+        # Create new song
+        song = Song(
+            song_id=song_id,
+            title=title,
+            artist=artist,
+            youtube_url=youtube_url,
+            lyrics=lyrics,
+            **kwargs,
+        )
+        session.add(song)
+
+    await session.commit()
+    await session.refresh(song)
+    return song
+
+
+async def get_all_songs(session: AsyncSession) -> list[Song]:
+    """Get all songs."""
+    from sqlalchemy import select
+
+    result = await session.execute(select(Song))
+    return list(result.scalars().all())
+
+
+async def get_candidate_song_ids(
+    session: AsyncSession,
+    keys: Optional[list[str]] = None,
+    bpm_min: Optional[float] = None,
+    bpm_max: Optional[float] = None,
+) -> set[str]:
+    """
+    Get candidate song IDs that match the given filters.
+
+    This is used to pre-filter before ANN search for better performance.
+
+    Args:
+        session: Database session
+        keys: List of keys to filter by (None = no filter)
+        bpm_min: Minimum BPM (None = no filter)
+        bpm_max: Maximum BPM (None = no filter)
+
+    Returns:
+        Set of song_ids that match all filters
+    """
+    from sqlalchemy import and_, select
+
+    conditions = []
+
+    if keys is not None and len(keys) > 0:
+        conditions.append(Song.key.in_(keys))
+
+    if bpm_min is not None:
+        conditions.append((Song.bpm.isnot(None)) & (Song.bpm >= bpm_min))
+
+    if bpm_max is not None:
+        conditions.append((Song.bpm.isnot(None)) & (Song.bpm <= bpm_max))
+
+    if not conditions:
+        # No filters, return all song_ids
+        stmt = select(Song.song_id)
+    else:
+        stmt = select(Song.song_id).where(and_(*conditions))
+
+    result = await session.execute(stmt)
+    return {row[0] for row in result.all()}
+
+
+async def close_db() -> None:
+    """Close database connections."""
+    await engine.dispose()
+
+

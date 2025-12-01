@@ -1,0 +1,26 @@
+services:
+  medley-recommender:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: medley-recommender
+    ports:
+      - "9876:9876"  # API (default, override via API_PORT env var)
+      - "9877:9877"  # Streamlit (default, override via STREAMLIT_PORT env var)
+    volumes:
+      - ./data:/app/data
+      - ./.env:/app/.env
+    environment:
+      - DATABASE_PATH=data/medley.db
+      - API_HOST=${API_HOST:-0.0.0.0}
+      - API_PORT=${API_PORT:-9876}
+      - STREAMLIT_PORT=${STREAMLIT_PORT:-9877}
+    restart: unless-stopped
+    # Command uses environment variables set above
+    command: >
+      sh -c "
+        uvicorn api.main:app --host $${API_HOST:-0.0.0.0} --port $${API_PORT:-9876} &
+        streamlit run ui/app.py --server.port $${STREAMLIT_PORT:-9877} --server.address $${API_HOST:-0.0.0.0} --server.headless=true
+      "
+
+
