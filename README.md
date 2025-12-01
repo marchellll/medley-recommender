@@ -11,14 +11,14 @@ Build a system that:
 - Downloads audio from YouTube and converts to WAV format
 - Extracts BPM & metadata (key, duration, etc.)
 - Creates text embeddings from lyrics
-- Stores vectors in a local ANN index (HNSWLib)
+- Stores vectors in a local ANN index (Chroma) with native filtering support
 - Stores metadata in SQLite database
 - Exposes a query API (filter by BPM + semantic similarity)
 
 ## Features
 
 - 🎵 **Semantic Search**: Find songs by lyrics similarity using BGE embeddings
-- 🎚️ **Metadata Filtering**: Filter by BPM, key, and other musical attributes
+- 🎚️ **Metadata Filtering**: Native filtering by BPM, key, and other musical attributes during search
 - 📥 **YouTube Integration**: Automatic audio download from YouTube
 - 🧠 **Local Processing**: All embeddings and indexing done locally
 - 🚀 **Fast API**: Async FastAPI server with MCP support

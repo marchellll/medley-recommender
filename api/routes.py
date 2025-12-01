@@ -11,7 +11,6 @@ from src.database.db import (
     AsyncSessionLocal,
     create_or_update_song,
     get_all_songs,
-    get_candidate_song_ids,
     get_song,
 )
 from src.database.models import Song
@@ -36,10 +35,9 @@ async def search_songs(
     session: AsyncSession = Depends(get_session),
 ) -> SearchResponse:
     """
-    Search for songs by semantic similarity with optimized filtering by key and BPM.
+    Search for songs by semantic similarity with native filtering by key and BPM.
 
-    This implementation pre-filters candidates in the database before ANN search,
-    making it much more efficient when filters are applied.
+    Chroma handles filtering natively during search, making it efficient.
 
     Args:
         request: Search request with query and filters
@@ -54,41 +52,14 @@ async def search_songs(
     # Generate query embedding
     query_embedding = generate_embedding(request.query)
 
-    # Pre-filter candidates by key/BPM if filters are provided
-    # This optimizes the search by only searching within matching songs
-    candidate_song_ids = None
-    has_filters = (
-        (request.keys is not None and len(request.keys) > 0)
-        or request.bpm_min is not None
-        or request.bpm_max is not None
+    # Search with native Chroma filtering
+    search_results = searcher.search(
+        query_embedding,
+        k=request.limit,
+        keys=request.keys,
+        bpm_min=request.bpm_min,
+        bpm_max=request.bpm_max,
     )
-
-    if has_filters:
-        candidate_song_ids = await get_candidate_song_ids(
-            session,
-            keys=request.keys,
-            bpm_min=request.bpm_min,
-            bpm_max=request.bpm_max,
-        )
-
-        # If no candidates match the filters, return empty results
-        if not candidate_song_ids:
-            return SearchResponse(results=[], total=0)
-
-    # Search in index with candidate filtering (if applicable)
-    # Use adaptive k to ensure we get enough results after filtering
-    max_k = 500  # Reasonable upper bound for adaptive search
-    if candidate_song_ids:
-        # Use optimized search with candidate filtering
-        search_results = searcher.search_with_candidates(
-            query_embedding,
-            candidate_song_ids=candidate_song_ids,
-            k=request.limit,
-            max_k=max_k,
-        )
-    else:
-        # No filters, use regular search
-        search_results = searcher.search(query_embedding, k=request.limit)
 
     if not search_results:
         return SearchResponse(results=[], total=0)

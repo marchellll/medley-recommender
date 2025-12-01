@@ -92,49 +92,6 @@ async def get_all_songs(session: AsyncSession) -> list[Song]:
     return list(result.scalars().all())
 
 
-async def get_candidate_song_ids(
-    session: AsyncSession,
-    keys: Optional[list[str]] = None,
-    bpm_min: Optional[float] = None,
-    bpm_max: Optional[float] = None,
-) -> set[str]:
-    """
-    Get candidate song IDs that match the given filters.
-
-    This is used to pre-filter before ANN search for better performance.
-
-    Args:
-        session: Database session
-        keys: List of keys to filter by (None = no filter)
-        bpm_min: Minimum BPM (None = no filter)
-        bpm_max: Maximum BPM (None = no filter)
-
-    Returns:
-        Set of song_ids that match all filters
-    """
-    from sqlalchemy import and_, select
-
-    conditions = []
-
-    if keys is not None and len(keys) > 0:
-        conditions.append(Song.key.in_(keys))
-
-    if bpm_min is not None:
-        conditions.append((Song.bpm.isnot(None)) & (Song.bpm >= bpm_min))
-
-    if bpm_max is not None:
-        conditions.append((Song.bpm.isnot(None)) & (Song.bpm <= bpm_max))
-
-    if not conditions:
-        # No filters, return all song_ids
-        stmt = select(Song.song_id)
-    else:
-        stmt = select(Song.song_id).where(and_(*conditions))
-
-    result = await session.execute(stmt)
-    return {row[0] for row in result.all()}
-
-
 async def close_db() -> None:
     """Close database connections."""
     await engine.dispose()

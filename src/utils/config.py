@@ -32,22 +32,6 @@ class Settings(BaseSettings):
         default="BAAI/bge-small-en-v1.5", alias="EMBEDDING_MODEL"
     )
 
-    # Index Configuration
-    # HNSW_M: Number of bi-directional links per node (higher = better recall, more memory)
-    # Recommended: 16 for >1000 songs, 8 for 100-1000 songs, 4 for 10-100 songs, 2 for <10 songs
-    hnsw_m: int = Field(default=16, alias="HNSW_M")
-
-    # HNSW_EF_CONSTRUCTION: Search width during construction (higher = better quality, slower build)
-    # Recommended: 200 for >1000 songs, 100 for 100-1000 songs, 50 for 10-100 songs, 10 for <10 songs
-    hnsw_ef_construction: int = Field(default=200, alias="HNSW_EF_CONSTRUCTION")
-
-    # HNSW_EF_SEARCH: Search width during query (higher = better recall, slower search)
-    # Recommended: 50 for >1000 songs, 30 for 100-1000 songs, 20 for 10-100 songs, 10 for <10 songs
-    hnsw_ef_search: int = Field(default=50, alias="HNSW_EF_SEARCH")
-
-    # HNSW_AUTO_ADJUST: Automatically adjust parameters for small datasets (recommended: true)
-    hnsw_auto_adjust: bool = Field(default=True, alias="HNSW_AUTO_ADJUST")
-
     # Logging
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 

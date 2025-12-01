@@ -1,7 +1,7 @@
 [project]
 name = "medley-recommender"
 version = "0.1.0"
-description = "A lightweight local system for recommending worship/praise songs based on semantic similarity and musical metadata. Downloads audio from YouTube, extracts BPM and key information, generates embeddings from lyrics, and provides fast similarity search via HNSWLib index."
+description = "A lightweight local system for recommending worship/praise songs based on semantic similarity and musical metadata. Downloads audio from YouTube, extracts BPM and key information, generates embeddings from lyrics, and provides fast similarity search via Chroma index."
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [
@@ -23,7 +23,7 @@ dependencies = [
     "transformers>=4.35.0",
     "torch>=2.1.0",
     "sentence-transformers>=2.2.0",
-    "hnswlib>=0.7.0",
+    "chromadb>=0.4.0",
     "sqlalchemy>=2.0.0",
     "aiosqlite>=0.19.0",
     "greenlet>=3.0.0",

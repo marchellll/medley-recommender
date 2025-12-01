@@ -290,6 +290,7 @@ async def process_embeddings_step(
 
 
 async def process_index_step(
+    session: AsyncSession,
     progress: Progress,
     skip: bool,
     results: dict,
@@ -308,12 +309,11 @@ async def process_index_step(
 
     # Build index - fail immediately on error
     try:
-        # Check if index exists
-        index_file = settings.index_dir / "hnsw_index.bin"
-        mapping_file = settings.index_dir / "id_mapping.json"
+        # Check if Chroma DB exists
+        chroma_db_path = settings.index_dir / "chroma_db"
 
         # Build index (will rebuild if embeddings changed)
-        build_index()
+        await build_index(session=session)
         results["_index"] = {"status": "✓ success"}
     except Exception as e:
         error_msg = str(e)
@@ -429,7 +429,7 @@ def main(
             )
 
             # Step 4: Index
-            await process_index_step(progress, skip_index, results, console, quiet)
+            await process_index_step(session, progress, skip_index, results, console, quiet)
 
     try:
         with progress:

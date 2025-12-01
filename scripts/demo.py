@@ -23,8 +23,8 @@ def main():
         console.print("[red]Error:[/red] data/songs.json not found. Please create it first.")
         return
 
-    index_file = Path("data/index/hnsw_index.bin")
-    if not index_file.exists():
+    chroma_db_path = Path("data/index/chroma_db")
+    if not chroma_db_path.exists():
         console.print(
             "[yellow]Warning:[/yellow] Index not found. Please run the pipeline first:"
         )

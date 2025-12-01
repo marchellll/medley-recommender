@@ -1,31 +1,33 @@
-"""ANN index building using HNSWLib."""
+"""ANN index building using Chroma."""
 
-import json
 from pathlib import Path
 from typing import Optional
 
-import hnswlib
-import numpy as np
+import chromadb
+from chromadb.config import Settings
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.database.models import Song
 from src.embeddings.encoder import load_embedding
 from src.utils.config import settings
 
 
-def build_index(
+async def build_index(
+    session: AsyncSession,
     embeddings_dir: Optional[Path] = None,
     output_dir: Optional[Path] = None,
-    dimension: Optional[int] = None,
-) -> tuple[hnswlib.Index, dict[str, int]]:
+) -> chromadb.Collection:
     """
-    Build HNSWLib index from embedding files.
+    Build Chroma index from embedding files with metadata from database.
 
     Args:
+        session: Database session to fetch song metadata
         embeddings_dir: Directory containing embedding JSON files
-        output_dir: Directory to save index files
-        dimension: Embedding dimension (auto-detected if None)
+        output_dir: Directory to save Chroma database
 
     Returns:
-        Tuple of (index, id_mapping) where id_mapping maps index IDs to song IDs
+        Chroma collection
     """
     if embeddings_dir is None:
         embeddings_dir = settings.embeddings_dir
@@ -37,119 +39,76 @@ def build_index(
     if not embedding_files:
         raise ValueError(f"No embedding files found in {embeddings_dir}")
 
-    # Load first embedding to get dimension
-    if dimension is None:
-        first_embedding = load_embedding(embedding_files[0])
-        dimension = len(first_embedding)
-    else:
-        first_embedding = load_embedding(embedding_files[0])
-        if len(first_embedding) != dimension:
-            raise ValueError(
-                f"Dimension mismatch: expected {dimension}, got {len(first_embedding)}"
-            )
+    # Initialize Chroma client with persistence
+    chroma_db_path = output_dir / "chroma_db"
+    chroma_db_path.mkdir(parents=True, exist_ok=True)
 
-    # Load all embeddings
-    embeddings = []
-    song_ids = []
-    id_mapping = {}  # Maps index ID to song ID
-
-    for idx, embedding_file in enumerate(embedding_files):
-        song_id = embedding_file.stem
-        embedding = load_embedding(embedding_file)
-
-        if len(embedding) != dimension:
-            raise ValueError(
-                f"Dimension mismatch for {song_id}: expected {dimension}, got {len(embedding)}"
-            )
-
-        embeddings.append(embedding)
-        song_ids.append(song_id)
-        id_mapping[idx] = song_id
-
-    # Convert to numpy array
-    embeddings_array = np.array(embeddings, dtype=np.float32)
-
-    # Adjust parameters for small datasets if auto-adjust is enabled
-    num_elements = len(embeddings)
-    if settings.hnsw_auto_adjust:
-        # M should be at least 2, but for very small datasets, cap it
-        # M cannot exceed num_elements - 1 (each node needs at least one other node to connect to)
-        adjusted_m = min(settings.hnsw_m, max(2, num_elements - 1))
-        # ef_construction should be reasonable for small datasets
-        # At minimum: M * 2, but cap it to avoid excessive computation
-        adjusted_ef_construction = min(
-            settings.hnsw_ef_construction,
-            max(adjusted_m * 2, num_elements * 2, 10)
+    client = chromadb.Client(
+        Settings(
+            chroma_db_impl="duckdb+parquet",
+            persist_directory=str(chroma_db_path),
         )
-    else:
-        adjusted_m = settings.hnsw_m
-        adjusted_ef_construction = settings.hnsw_ef_construction
-
-    # Create index
-    index = hnswlib.Index(space="cosine", dim=dimension)
-    index.init_index(
-        max_elements=num_elements,
-        ef_construction=adjusted_ef_construction,
-        M=adjusted_m,
     )
 
-    # Add embeddings to index
-    index.add_items(embeddings_array, list(range(len(embeddings))))
+    # Get or create collection
+    collection = client.get_or_create_collection(
+        name="songs",
+        metadata={"hnsw:space": "cosine"},  # Use cosine similarity
+    )
 
-    # Set ef_search for query time
-    index.set_ef(settings.hnsw_ef_search)
+    # Load embeddings and metadata
+    embeddings = []
+    ids = []
+    metadatas = []
 
-    # Save index
-    output_dir.mkdir(parents=True, exist_ok=True)
-    index_path = output_dir / "hnsw_index.bin"
-    index.save_index(str(index_path))
+    # Fetch all songs from database to get metadata
+    result = await session.execute(select(Song))
+    songs_dict = {song.song_id: song for song in result.scalars().all()}
 
-    # Save ID mapping
-    mapping_path = output_dir / "id_mapping.json"
-    with open(mapping_path, "w") as f:
-        json.dump(id_mapping, f, indent=2)
+    for embedding_file in embedding_files:
+        song_id = embedding_file.stem
 
-    return index, id_mapping
+        # Load embedding
+        embedding = load_embedding(embedding_file)
+        embeddings.append(embedding.tolist())
 
+        # Get metadata from database
+        song = songs_dict.get(song_id)
+        metadata = {}
+        if song:
+            if song.key is not None:
+                metadata["key"] = song.key
+            if song.bpm is not None:
+                metadata["bpm"] = float(song.bpm)
 
-def load_index(
-    index_dir: Optional[Path] = None,
-    dimension: Optional[int] = None,
-) -> tuple[hnswlib.Index, dict[str, int]]:
-    """
-    Load HNSWLib index from disk.
+        ids.append(song_id)
+        # Use empty dict if no metadata (Chroma requires dict, not None)
+        metadatas.append(metadata if metadata else {})
 
-    Args:
-        index_dir: Directory containing index files
-        dimension: Embedding dimension (required for loading)
+    # Add to Chroma collection
+    # Clear existing collection if rebuilding
+    if collection.count() > 0:
+        # Delete all existing items
+        existing_ids = collection.get()["ids"]
+        if existing_ids:
+            collection.delete(ids=existing_ids)
 
-    Returns:
-        Tuple of (index, id_mapping)
-    """
-    if index_dir is None:
-        index_dir = settings.index_dir
-    if dimension is None:
-        raise ValueError("Dimension must be provided to load index")
+    # Add in batches for better performance
+    batch_size = 100
+    for i in range(0, len(embeddings), batch_size):
+        batch_embeddings = embeddings[i : i + batch_size]
+        batch_ids = ids[i : i + batch_size]
+        batch_metadatas = metadatas[i : i + batch_size]
 
-    index_path = index_dir / "hnsw_index.bin"
-    mapping_path = index_dir / "id_mapping.json"
+        # All metadatas are already dicts (empty dict if no metadata)
 
-    if not index_path.exists():
-        raise FileNotFoundError(f"Index file not found: {index_path}")
-    if not mapping_path.exists():
-        raise FileNotFoundError(f"Mapping file not found: {mapping_path}")
+        collection.add(
+            embeddings=list(batch_embeddings),
+            ids=list(batch_ids),
+            metadatas=list(batch_metadatas),
+        )
 
-    # Load index
-    index = hnswlib.Index(space="cosine", dim=dimension)
-    index.load_index(str(index_path))
-    index.set_ef(settings.hnsw_ef_search)
+    # Persist to disk
+    client.persist()
 
-    # Load ID mapping
-    with open(mapping_path, "r") as f:
-        id_mapping = json.load(f)
-        # Convert string keys to int
-        id_mapping = {int(k): v for k, v in id_mapping.items()}
-
-    return index, id_mapping
-
-
+    return collection
