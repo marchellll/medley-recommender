@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Optional
 
 import chromadb
-from chromadb.config import Settings
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,12 +42,7 @@ async def build_index(
     chroma_db_path = output_dir / "chroma_db"
     chroma_db_path.mkdir(parents=True, exist_ok=True)
 
-    client = chromadb.Client(
-        Settings(
-            chroma_db_impl="duckdb+parquet",
-            persist_directory=str(chroma_db_path),
-        )
-    )
+    client = chromadb.PersistentClient(path=str(chroma_db_path))
 
     # Get or create collection
     collection = client.get_or_create_collection(
@@ -108,7 +102,6 @@ async def build_index(
             metadatas=list(batch_metadatas),
         )
 
-    # Persist to disk
-    client.persist()
+    # PersistentClient automatically persists, no need to call persist()
 
     return collection

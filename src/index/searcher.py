@@ -4,7 +4,6 @@ from typing import Optional
 
 import chromadb
 import numpy as np
-from chromadb.config import Settings
 
 from src.embeddings.encoder import generate_embedding
 from src.utils.config import settings
@@ -34,12 +33,7 @@ class IndexSearcher:
                 f"Chroma database not found: {chroma_db_path}. Please run the pipeline to build the index."
             )
 
-        client = chromadb.Client(
-            Settings(
-                chroma_db_impl="duckdb+parquet",
-                persist_directory=str(chroma_db_path),
-            )
-        )
+        client = chromadb.PersistentClient(path=str(chroma_db_path))
 
         self._collection = client.get_collection(name="songs")
 
