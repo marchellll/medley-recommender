@@ -7,9 +7,10 @@ Medley Recommender helps you discover worship and praise songs by searching thro
 ## Project Goal
 
 Build a system that:
-- Ingests worship/praise songs (title, artist, YouTube link, lyrics)
-- Downloads audio from YouTube and converts to WAV format
+- Ingests worship/praise songs (YouTube URLs only)
+- Downloads audio from YouTube and converts to MP3 format (192kbps)
 - Extracts BPM & metadata (key, duration, etc.)
+- Accepts lyrics (manually added to database)
 - Creates text embeddings from lyrics
 - Stores vectors in a local ANN index (Chroma) with native filtering support
 - Stores metadata in SQLite database
@@ -54,12 +55,13 @@ cp .env.example .env
 
 4. Prepare your songs data:
 ```bash
-# Edit data/songs.json with your songs
+# Edit data/links.json with YouTube URLs
+# Format: [{"url": "https://www.youtube.com/watch?v=..."}, ...]
 ```
 
 5. Run the pipeline:
 ```bash
-uv run python scripts/process_pipeline.py
+uv run python scripts/embeddings/process_pipeline.py
 ```
 
 ### Docker Deployment
@@ -78,22 +80,22 @@ Process all songs through the complete pipeline:
 
 ```bash
 # Process all songs
-uv run python scripts/process_pipeline.py
+uv run python scripts/embeddings/process_pipeline.py
 
 # Use custom input file
-uv run python scripts/process_pipeline.py --input path/to/songs.json
+uv run python scripts/embeddings/process_pipeline.py --input path/to/links.json
 
 # Force reprocessing
-uv run python scripts/process_pipeline.py --force
+uv run python scripts/embeddings/process_pipeline.py --force
 
 # Skip specific steps
-uv run python scripts/process_pipeline.py --skip-download --skip-metadata
+uv run python scripts/embeddings/process_pipeline.py --skip-download --skip-lyrics --skip-metadata
 
 # Verbose output
-uv run python scripts/process_pipeline.py --verbose
+uv run python scripts/embeddings/process_pipeline.py --verbose
 
 # JSON output for scripting
-uv run python scripts/process_pipeline.py --json
+uv run python scripts/embeddings/process_pipeline.py --json
 ```
 
 ### API Server
@@ -102,7 +104,7 @@ Start the API server (uses port from `.env`, default: 9876):
 
 ```bash
 # Recommended: Use the startup script (reads from .env)
-uv run python scripts/run_api.py
+uv run python scripts/servers/run_api.py
 
 # Or manually specify port
 uv run uvicorn api.main:app --host 0.0.0.0 --port 9876 --reload
@@ -128,7 +130,6 @@ uv run uvicorn api.main:app --host 0.0.0.0 --port 9876 --reload
     -H "Content-Type: application/json" \
     -d '{
       "title": "Song Title",
-      "artist": "Artist Name",
       "youtube_url": "https://youtube.com/watch?v=...",
       "lyrics": "Song lyrics here..."
     }'
@@ -140,7 +141,7 @@ Start the Streamlit UI (uses port from `.env`, default: 9877):
 
 ```bash
 # Recommended: Use the startup script (reads from .env)
-uv run python scripts/run_streamlit.py
+uv run python scripts/servers/run_streamlit.py
 
 # Or manually specify port
 uv run streamlit run ui/app.py --server.port 9877
@@ -151,13 +152,15 @@ uv run streamlit run ui/app.py --server.port 9877
 ```
 medley-recommender/
 ├── data/                    # Data files
-│   ├── audio/              # Downloaded audio files (WAV format)
-│   ├── songs.json          # Input songs data
-│   ├── songs_with_embeddings/  # Embedding files
+│   ├── audio/              # Downloaded audio files (MP3 format)
+│   ├── links.json          # Input YouTube URLs
+│   ├── songs_embeddings/        # Embedding files
 │   ├── index/              # ANN index files
 │   └── medley.db           # SQLite database
 ├── scripts/                 # Utility scripts
-│   └── process_pipeline.py # Master pipeline
+│   ├── playlist_extractor/ # Playlist extraction scripts
+│   ├── embeddings/         # Embedding and pipeline scripts
+│   └── servers/            # Server startup scripts
 ├── api/                     # API server
 ├── src/                     # Core library
 │   ├── audio/              # Audio processing
@@ -192,11 +195,11 @@ uv run mypy src/
 
 ## Master Pipeline Script
 
-The master pipeline script (`scripts/process_pipeline.py`) orchestrates the entire data processing workflow:
+The master pipeline script (`scripts/embeddings/process_pipeline.py`) orchestrates the entire data processing workflow:
 
-1. **Download**: Downloads audio from YouTube URLs
+1. **Download**: Downloads audio from YouTube URLs (extracts title automatically)
 2. **Metadata**: Extracts BPM, key, duration from audio files
-3. **Embeddings**: Generates semantic embeddings from lyrics
+3. **Embeddings**: Generates semantic embeddings from lyrics (lyrics must be added manually to database)
 4. **Index**: Builds ANN index for fast similarity search
 
 ### Features
@@ -208,19 +211,18 @@ The master pipeline script (`scripts/process_pipeline.py`) orchestrates the enti
 
 ### Example Output
 
-```
+```sh
+uv run python scripts/embeddings/process_pipeline.py
 🎵 Medley Recommender Pipeline
 Processing worship songs through the complete pipeline
 
 📥 Downloading audio... [████████████] 100%
+📝 Extracting lyrics... [████████████] 100%
 🔍 Extracting metadata... [████████████] 100%
 🧠 Generating embeddings... [████████████] 100%
 📊 Building index... [████████████] 100%
 ```
 
-## Roadmap
-
-See [medley_recommender_roadmap.md](medley_recommender_roadmap.md) for detailed milestones and tasks.
 
 ## License
 

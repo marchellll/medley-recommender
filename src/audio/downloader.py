@@ -55,23 +55,58 @@ def validate_youtube_url(url: str) -> bool:
     return any(re.match(pattern, url) for pattern in patterns)
 
 
+async def extract_title_from_youtube(youtube_url: str) -> str:
+    """
+    Extract title from YouTube video metadata.
+
+    Args:
+        youtube_url: YouTube video URL
+
+    Returns:
+        Video title
+
+    Raises:
+        RuntimeError: If extraction fails
+    """
+    loop = asyncio.get_event_loop()
+
+    def _extract_title() -> str:
+        """Extract title synchronously."""
+        ydl_opts = {
+            "quiet": True,
+            "no_warnings": True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(youtube_url, download=False)
+            return info.get("title", "Unknown Title")
+
+    try:
+        title = await loop.run_in_executor(None, _extract_title)
+        return title
+    except Exception as e:
+        logger.warning(f"Failed to extract title from YouTube: {e}")
+        return "Unknown Title"
+
+
 async def download_audio(
     song_id: str,
     youtube_url: str,
     output_path: Optional[Path] = None,
     progress_callback: Optional[callable] = None,
-) -> Path:
+    title: Optional[str] = None,
+) -> tuple[Path, str]:
     """
     Download audio from YouTube URL.
 
     Args:
         song_id: Unique song identifier
         youtube_url: YouTube video URL
-        output_path: Optional output path (defaults to data/audio/{song_id}.wav)
+        output_path: Optional output path (defaults to data/audio/{song_id}.mp3)
         progress_callback: Optional callback for progress updates
+        title: Optional title to avoid YouTube API call if file already exists
 
     Returns:
-        Path to downloaded audio file
+        Tuple of (path to downloaded audio file, video title)
 
     Raises:
         ValueError: If URL is invalid
@@ -81,25 +116,32 @@ async def download_audio(
         raise ValueError(f"Invalid YouTube URL: {youtube_url}")
 
     if output_path is None:
-        # Convert to WAV format (librosa/PySoundFile can read this natively)
-        output_path = settings.audio_dir / f"{song_id}.wav"
+        # Convert to MP3 format (librosa can read this natively)
+        output_path = settings.audio_dir / f"{song_id}.mp3"
 
     # Create output directory if it doesn't exist
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Check if file already exists
+    # Check if file already exists (skip expensive download)
     if output_path.exists():
-        return output_path
+        # Use provided title or extract from YouTube (expensive API call)
+        # Note: This function is typically called from download_audio_for_song which
+        # already checks and returns early, so this path is rarely taken
+        if title:
+            return output_path, title
+        # Only call expensive API if title not provided
+        title = await extract_title_from_youtube(youtube_url)
+        return output_path, title
 
-    # Configure yt-dlp options - download and convert to WAV using post-processor
+    # Configure yt-dlp options - download and convert to MP3 using post-processor
     ydl_opts = {
         "format": "bestaudio/best",
         "outtmpl": str(output_path.with_suffix(".%(ext)s")),
         "postprocessors": [
             {
                 "key": "FFmpegExtractAudio",
-                "preferredcodec": "wav",
-                "preferredquality": "192",  # Not used for WAV but kept for compatibility
+                "preferredcodec": "mp3",
+                "preferredquality": "192",  # MP3 bitrate: 192kbps
             }
         ],
         "quiet": True,
@@ -122,14 +164,17 @@ async def download_audio(
     # Run download in thread pool to avoid blocking
     loop = asyncio.get_event_loop()
 
-    def _download() -> None:
+    title = "Unknown Title"
+
+    def _download() -> str:
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # Extract info first for logging
+                # Extract info first to get title
                 try:
                     info = ydl.extract_info(youtube_url, download=False)
+                    title = info.get("title", "Unknown Title")
                     logger.debug(f"Video info extracted for {youtube_url}: {json.dumps({
-                        'title': info.get('title'),
+                        'title': title,
                         'duration': info.get('duration'),
                         'formats_count': len(info.get('formats', [])),
                     }, indent=2)}")
@@ -138,6 +183,7 @@ async def download_audio(
 
                 # Now download
                 ydl.download([youtube_url])
+                return title
         except yt_dlp.utils.DownloadError as e:
             # Log detailed download error
             error_details = {
@@ -161,7 +207,7 @@ async def download_audio(
             raise
 
     try:
-        await loop.run_in_executor(None, _download)
+        title = await loop.run_in_executor(None, _download)
     except yt_dlp.utils.DownloadError as e:
         # Clean up partial file if it exists
         if output_path.exists():
@@ -177,72 +223,73 @@ async def download_audio(
         logger.error(error_msg, exc_info=True)
         raise RuntimeError(error_msg) from e
 
-    # FFmpegExtractAudio creates .wav file, find it and rename if needed
-    wav_file = output_path
-    if not wav_file.exists():
-        # Try to find wav file (post-processor changes extension)
-        possible_files = list(output_path.parent.glob(f"{song_id}*.wav"))
+    # FFmpegExtractAudio creates .mp3 file, find it and rename if needed
+    mp3_file = output_path
+    if not mp3_file.exists():
+        # Try to find mp3 file (post-processor changes extension)
+        possible_files = list(output_path.parent.glob(f"{song_id}*.mp3"))
         if possible_files:
-            wav_file = possible_files[0]
+            mp3_file = possible_files[0]
             # Rename to expected name if different
-            if wav_file != output_path:
-                wav_file.rename(output_path)
+            if mp3_file != output_path:
+                mp3_file.rename(output_path)
         else:
-            raise RuntimeError(f"Download completed but .wav file not found at {output_path}")
+            raise RuntimeError(f"Download completed but .mp3 file not found at {output_path}")
 
     # Verify file was created
     if not output_path.exists():
         raise RuntimeError("Download completed but file not found")
 
-    return output_path
+    return output_path, title
 
 
 async def download_audio_for_song(
     session: AsyncSession,
     song_id: str,
-    title: str,
-    artist: str,
     youtube_url: str,
-    lyrics: str,
+    lyrics: str = "",
     progress_callback: Optional[callable] = None,
-) -> Path:
+    force: bool = False,
+) -> tuple[Path, str]:
     """
     Download audio for a song and update database.
+
+    Optimizations:
+    - Skips download if audio file already exists (unless forced)
+    - Avoids expensive YouTube download and API calls when file exists
 
     Args:
         session: Database session
         song_id: Unique song identifier
-        title: Song title
-        artist: Song artist
         youtube_url: YouTube video URL
-        lyrics: Song lyrics
+        lyrics: Song lyrics (optional, can be empty initially)
         progress_callback: Optional callback for progress updates
+        force: If True, re-download even if file already exists
 
     Returns:
-        Path to downloaded audio file
+        Tuple of (path to downloaded audio file, video title)
     """
-    # Check if audio file already exists in database
+    # Check if audio file already exists in database (skip expensive download unless forced)
     from src.database.db import get_song
 
     song = await get_song(session, song_id)
-    if song and song.audio_file_path and Path(song.audio_file_path).exists():
-        return Path(song.audio_file_path)
+    if not force and song and song.audio_file_path and Path(song.audio_file_path).exists():
+        return Path(song.audio_file_path), song.title
 
-    # Download audio
-    audio_path = await download_audio(song_id, youtube_url, progress_callback=progress_callback)
+    # Download audio (this also extracts title from YouTube)
+    audio_path, title = await download_audio(song_id, youtube_url, progress_callback=progress_callback)
 
     # Update database
     await create_or_update_song(
         session,
         song_id,
         title,
-        artist,
         youtube_url,
         lyrics,
         audio_file_path=str(audio_path.resolve()),
     )
 
-    return audio_path
+    return audio_path, title
 
 
 def compute_file_hash(file_path: Path) -> str:

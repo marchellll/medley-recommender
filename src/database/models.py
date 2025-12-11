@@ -20,7 +20,6 @@ class Song(Base):
 
     song_id: Mapped[str] = mapped_column(String(255), primary_key=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
-    artist: Mapped[str] = mapped_column(String(500), nullable=False)
     youtube_url: Mapped[str] = mapped_column(String(1000), nullable=False)
     lyrics: Mapped[str] = mapped_column(Text, nullable=False)
 
@@ -31,8 +30,6 @@ class Song(Base):
     bpm: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     key: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     duration: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    genre: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    mood: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     # Embedding file path
     embedding_file_path: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
@@ -46,6 +43,6 @@ class Song(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<Song(song_id='{self.song_id}', title='{self.title}', artist='{self.artist}')>"
+        return f"<Song(song_id='{self.song_id}', title='{self.title}')>"
 
 

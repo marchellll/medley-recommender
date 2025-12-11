@@ -85,7 +85,6 @@ async def search_songs(
             SongResult(
                 song_id=song.song_id,
                 title=song.title,
-                artist=song.artist,
                 bpm=song.bpm,
                 key=song.key,
                 similarity_score=similarity_score,
@@ -112,12 +111,31 @@ async def add_song(
         Success response with song ID
     """
     import hashlib
+    import re
     from datetime import datetime
     from pathlib import Path
 
-    # Generate song_id from title and artist
-    song_id_base = f"{request.title}_{request.artist}".lower().replace(" ", "_")
-    song_id = hashlib.md5(song_id_base.encode()).hexdigest()[:16]
+    # Extract video ID from YouTube URL
+    youtube_url_str = str(request.youtube_url)
+    patterns = [
+        r"(?:youtube\.com/watch\?v=|youtu\.be/)([A-Za-z0-9_-]{11})",
+        r"youtube\.com/embed/([A-Za-z0-9_-]{11})",
+    ]
+    video_id = None
+    for pattern in patterns:
+        match = re.search(pattern, youtube_url_str)
+        if match:
+            video_id = match.group(1)
+            break
+
+    if not video_id:
+        return AddSongResponse(
+            success=False,
+            message="Invalid YouTube URL",
+        )
+
+    # Generate song_id from video ID
+    song_id = f"youtube/{video_id}"
 
     try:
         # Save to new_songs directory
@@ -127,8 +145,7 @@ async def add_song(
         song_data = {
             "song_id": song_id,
             "title": request.title,
-            "artist": request.artist,
-            "youtube_url": str(request.youtube_url),
+            "youtube_url": youtube_url_str,
             "lyrics": request.lyrics,
         }
 
@@ -145,8 +162,7 @@ async def add_song(
             session,
             song_id,
             request.title,
-            request.artist,
-            str(request.youtube_url),
+            youtube_url_str,
             request.lyrics,
         )
 

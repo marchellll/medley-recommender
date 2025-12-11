@@ -19,7 +19,6 @@ class AddSongRequest(BaseModel):
     """Add song request model."""
 
     title: str
-    artist: str
     youtube_url: HttpUrl
     lyrics: str
 
@@ -29,7 +28,6 @@ class SongResult(BaseModel):
 
     song_id: str
     title: str
-    artist: str
     bpm: Optional[float] = None
     key: Optional[str] = None
     similarity_score: float

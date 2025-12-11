@@ -9,6 +9,33 @@ from sentence_transformers import SentenceTransformer
 from src.utils.config import settings
 
 
+def _get_device() -> str:
+    """
+    Determine the best available device for model inference.
+
+    Priority: CUDA > MPS (Apple Silicon) > CPU
+
+    Returns:
+        Device string: "cuda", "mps", or "cpu"
+    """
+    try:
+        import torch
+
+        # Check for CUDA (NVIDIA GPU)
+        if torch.cuda.is_available():
+            return "cuda"
+
+        # Check for MPS (Apple Silicon GPU)
+        if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            return "mps"
+
+        # Fall back to CPU
+        return "cpu"
+    except ImportError:
+        # PyTorch not available, use CPU
+        return "cpu"
+
+
 _model_cache: Optional[SentenceTransformer] = None
 
 
@@ -50,13 +77,16 @@ def get_embedding_model(
         if needs_download and progress_callback:
             progress_callback(f"Downloading model: {model_name}...")
 
+        # Determine device (CUDA > MPS > CPU)
+        device = _get_device()
+
         # Load model with caching
         # SentenceTransformer will show its own progress via tqdm
         # We enable it by default - it will show download progress
         _model_cache = SentenceTransformer(
             model_name,
             cache_folder=str(cache_dir),
-            device="cuda" if os.getenv("CUDA_VISIBLE_DEVICES") else "cpu",
+            device=device,
         )
 
         if progress_callback:

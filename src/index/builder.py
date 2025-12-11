@@ -20,6 +20,10 @@ async def build_index(
     """
     Build Chroma index from embedding files with metadata from database.
 
+    IMPORTANT: This function includes ALL embedding files in the embeddings directory,
+    not just ones from links.json. This ensures existing embeddings are always included
+    in the index even if links.json is empty or reduced.
+
     Args:
         session: Database session to fetch song metadata
         embeddings_dir: Directory containing embedding JSON files
@@ -33,7 +37,7 @@ async def build_index(
     if output_dir is None:
         output_dir = settings.index_dir
 
-    # Get all embedding files
+    # Get ALL embedding files from the directory (not filtered by links.json)
     embedding_files = list(embeddings_dir.glob("*.json"))
     if not embedding_files:
         raise ValueError(f"No embedding files found in {embeddings_dir}")

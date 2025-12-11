@@ -31,14 +31,13 @@ def search_songs(query: str, bpm_min: float | None, bpm_max: float | None, keys:
         return {"results": [], "total": 0}
 
 
-def add_song(title: str, artist: str, youtube_url: str, lyrics: str) -> dict:
+def add_song(title: str, youtube_url: str, lyrics: str) -> dict:
     """Add a new song via API."""
     try:
         response = requests.post(
             f"{API_BASE_URL}/add_song",
             json={
                 "title": title,
-                "artist": artist,
                 "youtube_url": youtube_url,
                 "lyrics": lyrics,
             },
@@ -102,7 +101,6 @@ def main():
 
                             with col1:
                                 st.subheader(f"{i}. {song['title']}")
-                                st.write(f"**Artist:** {song['artist']}")
                                 if song.get("bpm"):
                                     st.write(f"**BPM:** {song['bpm']:.1f}")
                                 if song.get("key"):
@@ -122,16 +120,15 @@ def main():
         st.header("Add New Song")
         with st.form("add_song_form"):
             title = st.text_input("Song Title *")
-            artist = st.text_input("Artist *")
             youtube_url = st.text_input("YouTube URL *")
             lyrics = st.text_area("Lyrics *", height=200)
 
             submitted = st.form_submit_button("Add Song", type="primary")
 
             if submitted:
-                if title and artist and youtube_url and lyrics:
+                if title and youtube_url and lyrics:
                     with st.spinner("Adding song..."):
-                        result = add_song(title, artist, youtube_url, lyrics)
+                        result = add_song(title, youtube_url, lyrics)
 
                     if result.get("success"):
                         st.success(f"✅ Song added successfully!")

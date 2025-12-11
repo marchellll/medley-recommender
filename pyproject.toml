@@ -1,7 +1,7 @@
 [project]
 name = "medley-recommender"
 version = "0.1.0"
-description = "A lightweight local system for recommending worship/praise songs based on semantic similarity and musical metadata. Downloads audio from YouTube, extracts BPM and key information, generates embeddings from lyrics, and provides fast similarity search via Chroma index."
+description = "A lightweight local system for recommending worship/praise songs based on semantic similarity and musical metadata. Downloads audio from YouTube, extracts BPM and key information, generates embeddings from lyrics (manually added), and provides fast similarity search via Chroma index."
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [

@@ -47,14 +47,13 @@ class MCPServer:
                     "type": "object",
                     "properties": {
                         "title": {"type": "string", "description": "Song title"},
-                        "artist": {"type": "string", "description": "Artist name"},
                         "youtube_url": {
                             "type": "string",
                             "description": "YouTube URL for the song",
                         },
                         "lyrics": {"type": "string", "description": "Song lyrics"},
                     },
-                    "required": ["title", "artist", "youtube_url", "lyrics"],
+                    "required": ["title", "youtube_url", "lyrics"],
                 },
             },
         ]
@@ -79,7 +78,6 @@ class MCPServer:
                         {
                             "song_id": r.song_id,
                             "title": r.title,
-                            "artist": r.artist,
                             "bpm": r.bpm,
                             "similarity_score": r.similarity_score,
                             "youtube_url": r.youtube_url,

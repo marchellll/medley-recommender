@@ -51,7 +51,6 @@ async def create_or_update_song(
     session: AsyncSession,
     song_id: str,
     title: str,
-    artist: str,
     youtube_url: str,
     lyrics: str,
     **kwargs,
@@ -61,7 +60,6 @@ async def create_or_update_song(
     if song:
         # Update existing song
         song.title = title
-        song.artist = artist
         song.youtube_url = youtube_url
         song.lyrics = lyrics
         for key, value in kwargs.items():
@@ -72,7 +70,6 @@ async def create_or_update_song(
         song = Song(
             song_id=song_id,
             title=title,
-            artist=artist,
             youtube_url=youtube_url,
             lyrics=lyrics,
             **kwargs,

@@ -29,7 +29,7 @@ async def extract_metadata(
     if not audio_path.exists():
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
-    # Load audio file directly (should be WAV from downloader post-processor)
+    # Load audio file directly (should be MP3 from downloader post-processor)
     try:
         y, sr = librosa.load(str(audio_path), sr=None)
     except Exception as e:
@@ -60,8 +60,6 @@ async def extract_metadata(
         "bpm": bpm,
         "key": key,
         "duration": float(duration),
-        "genre": None,  # Could be added with additional models
-        "mood": None,  # Could be added with additional models
     }
 
     # Update database
@@ -71,7 +69,6 @@ async def extract_metadata(
             session,
             song.song_id,
             song.title,
-            song.artist,
             song.youtube_url,
             song.lyrics,
             **metadata,
@@ -83,6 +80,7 @@ async def extract_metadata(
 async def extract_metadata_for_song(
     session: AsyncSession,
     song_id: str,
+    force: bool = False,
 ) -> dict:
     """
     Extract metadata for a song from its audio file.
@@ -90,6 +88,7 @@ async def extract_metadata_for_song(
     Args:
         session: Database session
         song_id: Song identifier
+        force: If True, re-extract even if metadata already exists
 
     Returns:
         Dictionary with extracted metadata
@@ -103,6 +102,17 @@ async def extract_metadata_for_song(
 
     if not song.audio_file_path:
         raise ValueError(f"Audio file path not set for song: {song_id}")
+
+    # Skip expensive extraction if metadata already exists (unless forced)
+    if not force and song.bpm is not None:
+        audio_path = Path(song.audio_file_path)
+        if audio_path.exists():
+            # Return existing metadata
+            return {
+                "bpm": song.bpm,
+                "key": song.key,
+                "duration": song.duration,
+            }
 
     audio_path = Path(song.audio_file_path)
     return await extract_metadata(session, song_id, audio_path)

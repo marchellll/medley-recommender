@@ -51,6 +51,7 @@ async def generate_and_save_embedding(
     song_id: str,
     lyrics: str,
     model: Optional[SentenceTransformer] = None,
+    force: bool = False,
 ) -> Path:
     """
     Generate embedding for lyrics and save to file.
@@ -60,18 +61,24 @@ async def generate_and_save_embedding(
         song_id: Song identifier
         lyrics: Song lyrics
         model: Optional model instance
+        force: If True, regenerate even if embedding already exists
 
     Returns:
         Path to saved embedding file
     """
-    # Generate embedding
-    embedding = generate_embedding(lyrics, model)
-
-    # Save to file
     embeddings_dir = settings.embeddings_dir
     embeddings_dir.mkdir(parents=True, exist_ok=True)
 
     embedding_file = embeddings_dir / f"{song_id}.json"
+
+    # Skip expensive generation if embedding already exists (unless forced)
+    if not force and embedding_file.exists():
+        song = await get_song(session, song_id)
+        if song and song.embedding_file_path:
+            return embedding_file
+
+    # Generate embedding (expensive operation)
+    embedding = generate_embedding(lyrics, model)
 
     # Convert to list for JSON serialization
     embedding_list = embedding.tolist()
@@ -87,7 +94,6 @@ async def generate_and_save_embedding(
             session,
             song.song_id,
             song.title,
-            song.artist,
             song.youtube_url,
             song.lyrics,
             embedding_file_path=str(embedding_file.resolve()),
@@ -100,6 +106,7 @@ async def generate_embedding_for_song(
     session: AsyncSession,
     song_id: str,
     model: Optional[SentenceTransformer] = None,
+    force: bool = False,
 ) -> Path:
     """
     Generate embedding for a song from its lyrics.
@@ -108,18 +115,29 @@ async def generate_embedding_for_song(
         session: Database session
         song_id: Song identifier
         model: Optional model instance
+        force: If True, regenerate even if embedding already exists
 
     Returns:
         Path to saved embedding file
 
     Raises:
-        ValueError: If song not found
+        ValueError: If song not found or lyrics are missing/empty
     """
     song = await get_song(session, song_id)
     if not song:
         raise ValueError(f"Song not found: {song_id}")
 
-    return await generate_and_save_embedding(session, song_id, song.lyrics, model)
+    if not song.lyrics or not song.lyrics.strip():
+        raise ValueError(f"Song {song_id} ({song.title or 'unknown'}) is missing lyrics. Please add lyrics manually before generating embeddings.")
+
+    # Clean lyrics before generating embedding
+    from src.utils.lyrics import clean_lyrics
+    cleaned_lyrics = clean_lyrics(song.lyrics)
+
+    if not cleaned_lyrics.strip():
+        raise ValueError(f"Song {song_id} ({song.title or 'unknown'}) has empty lyrics after cleaning. Please add valid lyrics.")
+
+    return await generate_and_save_embedding(session, song_id, cleaned_lyrics, model, force=force)
 
 
 def load_embedding(embedding_file: Path) -> np.ndarray:

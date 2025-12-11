@@ -17,7 +17,7 @@ def temp_data_dir() -> Generator[Path, None, None]:
         data_dir = Path(tmpdir) / "data"
         data_dir.mkdir()
         (data_dir / "audio").mkdir()
-        (data_dir / "songs_with_embeddings").mkdir()
+        (data_dir / "songs_embeddings").mkdir()
         (data_dir / "index").mkdir()
         (data_dir / "new_songs").mkdir()
         yield data_dir

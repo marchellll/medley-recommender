@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     @property
     def embeddings_dir(self) -> Path:
         """Get embeddings directory path."""
-        return self.data_dir / "songs_with_embeddings"
+        return self.data_dir / "songs_embeddings"
 
     @property
     def index_dir(self) -> Path:
