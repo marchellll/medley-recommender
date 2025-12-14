@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from src.database.models import Base, Song
 from src.utils.config import settings
+from src.utils.lyrics import clean_lyrics
 
 
 # Create async engine
@@ -55,13 +56,20 @@ async def create_or_update_song(
     lyrics: str,
     **kwargs,
 ) -> Song:
-    """Create or update a song."""
+    """Create or update a song.
+
+    Lyrics are automatically cleaned (removes hidden characters, normalizes typographic characters)
+    before being saved to the database.
+    """
+    # Clean lyrics before saving to ensure consistent, clean data in database
+    cleaned_lyrics = clean_lyrics(lyrics)
+
     song = await get_song(session, song_id)
     if song:
         # Update existing song
         song.title = title
         song.youtube_url = youtube_url
-        song.lyrics = lyrics
+        song.lyrics = cleaned_lyrics
         for key, value in kwargs.items():
             if hasattr(song, key):
                 setattr(song, key, value)
@@ -71,7 +79,7 @@ async def create_or_update_song(
             song_id=song_id,
             title=title,
             youtube_url=youtube_url,
-            lyrics=lyrics,
+            lyrics=cleaned_lyrics,
             **kwargs,
         )
         session.add(song)
