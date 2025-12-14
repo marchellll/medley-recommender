@@ -71,6 +71,9 @@ async def generate_and_save_embedding(
 
     embedding_file = embeddings_dir / f"{song_id}.json"
 
+    # Ensure parent directory exists (in case song_id contains path separators like "youtube/video_id")
+    embedding_file.parent.mkdir(parents=True, exist_ok=True)
+
     # Skip expensive generation if embedding already exists (unless forced)
     if not force and embedding_file.exists():
         song = await get_song(session, song_id)

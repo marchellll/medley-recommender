@@ -126,6 +126,7 @@ async def process_download_step(
     results: dict,
     console: Console,
     quiet: bool,
+    verbose: bool = False,
 ) -> None:
     """
     Process download step.
@@ -155,16 +156,38 @@ async def process_download_step(
         youtube_url = song_data["youtube_url"]
         progress.update(task, description=f"[cyan]📥 Downloading: {song_id}")
 
-        # Check if already downloaded
+        # Check if already downloaded - check both DB record AND file system
         song = await get_song(session, song_id)
-        if not force and song and song.audio_file_path:
-            audio_path = Path(song.audio_file_path)
-            if audio_path.exists():
+        expected_path = settings.audio_dir / f"{song_id}.mp3"
+
+        # Skip if file exists (either from DB record or on disk)
+        if not force:
+            # Check DB record first
+            if song and song.audio_file_path:
+                audio_path = Path(song.audio_file_path)
+                if audio_path.exists():
+                    if verbose:
+                        msg = f"⏸ Skipping {song_id}: File exists at {audio_path} (from DB record)"
+                        logger.info(msg)
+                        console.print(f"[dim]{msg}[/dim]")
+                    results[song_id]["download"] = "⏸ skipped"
+                    progress.advance(task)
+                    continue
+            # Also check expected file path even if no DB record
+            elif expected_path.exists():
+                if verbose:
+                    msg = f"⏸ Skipping {song_id}: File exists at {expected_path} (no DB record)"
+                    logger.info(msg)
+                    console.print(f"[dim]{msg}[/dim]")
                 results[song_id]["download"] = "⏸ skipped"
                 progress.advance(task)
                 continue
 
         # Download - fail immediately on error
+        if verbose:
+            msg = f"📥 Downloading {song_id} from {youtube_url}"
+            logger.info(msg)
+            console.print(f"[cyan]{msg}[/cyan]")
         try:
             audio_path, title = await download_audio_for_song(
                 session,
@@ -172,6 +195,7 @@ async def process_download_step(
                 youtube_url,
                 lyrics="",  # Lyrics should be added manually to database
                 force=force,
+                verbose=verbose,
             )
             # Update song_data with extracted title
             song_data["title"] = title
@@ -547,7 +571,7 @@ def main(
         async with AsyncSessionLocal() as session:
             # Step 1: Download
             await process_download_step(
-                session, songs, progress, force, skip_download, results, console, quiet
+                session, songs, progress, force, skip_download, results, console, quiet, verbose
             )
 
             # Step 2: Metadata

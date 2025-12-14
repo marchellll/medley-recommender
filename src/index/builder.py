@@ -37,8 +37,9 @@ async def build_index(
     if output_dir is None:
         output_dir = settings.index_dir
 
-    # Get ALL embedding files from the directory (not filtered by links.json)
-    embedding_files = list(embeddings_dir.glob("*.json"))
+    # Get ALL embedding files from the directory recursively (not filtered by links.json)
+    # This handles subdirectories like youtube/video_id.json
+    embedding_files = list(embeddings_dir.rglob("*.json"))
     if not embedding_files:
         raise ValueError(f"No embedding files found in {embeddings_dir}")
 
@@ -64,7 +65,10 @@ async def build_index(
     songs_dict = {song.song_id: song for song in result.scalars().all()}
 
     for embedding_file in embedding_files:
-        song_id = embedding_file.stem
+        # Extract song_id from relative path (handles subdirectories like youtube/video_id.json)
+        # Get relative path from embeddings_dir, then remove .json extension
+        relative_path = embedding_file.relative_to(embeddings_dir)
+        song_id = str(relative_path.with_suffix(""))  # Remove .json extension, keep path structure
 
         # Load embedding
         embedding = load_embedding(embedding_file)

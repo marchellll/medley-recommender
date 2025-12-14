@@ -60,6 +60,9 @@ async def create_or_update_song(
 
     Lyrics are automatically cleaned (removes hidden characters, normalizes typographic characters)
     before being saved to the database.
+
+    IMPORTANT: This function is idempotent - existing lyrics are preserved if new lyrics are empty.
+    This prevents the pipeline from overwriting manually inputted lyrics.
     """
     # Clean lyrics before saving to ensure consistent, clean data in database
     cleaned_lyrics = clean_lyrics(lyrics)
@@ -69,7 +72,11 @@ async def create_or_update_song(
         # Update existing song
         song.title = title
         song.youtube_url = youtube_url
-        song.lyrics = cleaned_lyrics
+        # Preserve existing lyrics if new lyrics are empty (idempotent behavior)
+        # This prevents the pipeline from overwriting manually inputted lyrics
+        if cleaned_lyrics.strip():
+            song.lyrics = cleaned_lyrics
+        # If cleaned_lyrics is empty, keep existing lyrics unchanged
         for key, value in kwargs.items():
             if hasattr(song, key):
                 setattr(song, key, value)

@@ -94,6 +94,7 @@ async def download_audio(
     output_path: Optional[Path] = None,
     progress_callback: Optional[callable] = None,
     title: Optional[str] = None,
+    verbose: bool = False,
 ) -> tuple[Path, str]:
     """
     Download audio from YouTube URL.
@@ -121,17 +122,28 @@ async def download_audio(
 
     # Create output directory if it doesn't exist
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    if verbose:
+        logger.info(f"    Output path: {output_path}")
+        logger.info(f"    File exists: {output_path.exists()}")
 
     # Check if file already exists (skip expensive download)
     if output_path.exists():
-        # Use provided title or extract from YouTube (expensive API call)
+        if verbose:
+            logger.info(f"    File already exists at {output_path}")
+        # Use provided title if available, otherwise use default to avoid network call
         # Note: This function is typically called from download_audio_for_song which
         # already checks and returns early, so this path is rarely taken
         if title:
+            if verbose:
+                logger.info(f"    Using provided title: '{title}'")
             return output_path, title
-        # Only call expensive API if title not provided
-        title = await extract_title_from_youtube(youtube_url)
-        return output_path, title
+        # File exists but no title provided - use default instead of making network call
+        # The title should have been provided by the caller if available
+        if verbose:
+            logger.warning(f"    File {output_path} exists but no title provided, using default title")
+        else:
+            logger.warning(f"File {output_path} exists but no title provided, using default title")
+        return output_path, "Unknown Title"
 
     # Configure yt-dlp options - download and convert to MP3 using post-processor
     ydl_opts = {
@@ -144,9 +156,12 @@ async def download_audio(
                 "preferredquality": "192",  # MP3 bitrate: 192kbps
             }
         ],
-        "quiet": True,
-        "no_warnings": True,
+        "quiet": not verbose,  # Show yt-dlp output if verbose
+        "no_warnings": not verbose,
     }
+    if verbose:
+        logger.info(f"    Starting download from YouTube: {youtube_url}")
+        logger.info(f"    Output will be saved to: {output_path}")
 
     # Add progress hook if callback provided
     if progress_callback:
@@ -165,14 +180,21 @@ async def download_audio(
     loop = asyncio.get_event_loop()
 
     title = "Unknown Title"
+    # Capture verbose in closure
+    verbose_flag = verbose
 
     def _download() -> str:
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 # Extract info first to get title
                 try:
+                    if verbose_flag:
+                        logger.info(f"    Extracting video info from YouTube...")
                     info = ydl.extract_info(youtube_url, download=False)
                     title = info.get("title", "Unknown Title")
+                    if verbose_flag:
+                        logger.info(f"    Video title: '{title}'")
+                        logger.info(f"    Duration: {info.get('duration', 'unknown')} seconds")
                     logger.debug(f"Video info extracted for {youtube_url}: {json.dumps({
                         'title': title,
                         'duration': info.get('duration'),
@@ -182,7 +204,11 @@ async def download_audio(
                     logger.warning(f"Could not extract video info: {info_error}")
 
                 # Now download
+                if verbose_flag:
+                    logger.info(f"    Downloading audio...")
                 ydl.download([youtube_url])
+                if verbose_flag:
+                    logger.info(f"    Download completed")
                 return title
         except yt_dlp.utils.DownloadError as e:
             # Log detailed download error
@@ -208,6 +234,8 @@ async def download_audio(
 
     try:
         title = await loop.run_in_executor(None, _download)
+        if verbose:
+            logger.info(f"    Successfully downloaded: {title}")
     except yt_dlp.utils.DownloadError as e:
         # Clean up partial file if it exists
         if output_path.exists():
@@ -250,12 +278,14 @@ async def download_audio_for_song(
     lyrics: str = "",
     progress_callback: Optional[callable] = None,
     force: bool = False,
+    verbose: bool = False,
 ) -> tuple[Path, str]:
     """
     Download audio for a song and update database.
 
     Optimizations:
     - Skips download if audio file already exists (unless forced)
+    - Checks both database record AND file system existence
     - Avoids expensive YouTube download and API calls when file exists
 
     Args:
@@ -265,21 +295,83 @@ async def download_audio_for_song(
         lyrics: Song lyrics (optional, can be empty initially)
         progress_callback: Optional callback for progress updates
         force: If True, re-download even if file already exists
+        verbose: If True, log detailed information about the download process
 
     Returns:
         Tuple of (path to downloaded audio file, video title)
     """
-    # Check if audio file already exists in database (skip expensive download unless forced)
     from src.database.db import get_song
 
+    # Get song from database (if exists)
     song = await get_song(session, song_id)
-    if not force and song and song.audio_file_path and Path(song.audio_file_path).exists():
-        return Path(song.audio_file_path), song.title
+    if verbose:
+        if song:
+            logger.info(f"  Found existing DB record for {song_id}: title='{song.title}', audio_file_path='{song.audio_file_path}'")
+        else:
+            logger.info(f"  No existing DB record for {song_id}")
 
-    # Download audio (this also extracts title from YouTube)
-    audio_path, title = await download_audio(song_id, youtube_url, progress_callback=progress_callback)
+    # Determine expected file path
+    expected_path = settings.audio_dir / f"{song_id}.mp3"
+    if verbose:
+        logger.info(f"  Expected file path: {expected_path}")
+
+    # Check if audio file already exists (skip expensive download unless forced)
+    if not force:
+        # First check: file exists at expected path
+        if expected_path.exists():
+            if verbose:
+                logger.info(f"  ✓ File exists at expected path: {expected_path}")
+            # Update DB with file path if missing
+            if song and not song.audio_file_path:
+                if verbose:
+                    logger.info(f"  Updating DB record with file path: {expected_path}")
+                song.audio_file_path = str(expected_path.resolve())
+                await session.commit()
+            # Return with title from DB if available, otherwise use default
+            title = song.title if song else "Unknown Title"
+            if verbose:
+                logger.info(f"  Using title from DB: '{title}'")
+            # Create DB record if it doesn't exist
+            if not song:
+                if verbose:
+                    logger.info(f"  Creating new DB record for {song_id}")
+                await create_or_update_song(
+                    session,
+                    song_id,
+                    title,
+                    youtube_url,
+                    lyrics,
+                    audio_file_path=str(expected_path.resolve()),
+                )
+            if verbose:
+                logger.info(f"  ⏸ Skipping download for {song_id} (file already exists)")
+            return expected_path, title
+
+        # Second check: file exists at path stored in DB (defense in depth)
+        if song and song.audio_file_path and Path(song.audio_file_path).exists():
+            if verbose:
+                logger.info(f"  ✓ File exists at DB path: {song.audio_file_path}")
+                logger.info(f"  ⏸ Skipping download for {song_id} (file already exists at DB path)")
+            return Path(song.audio_file_path), song.title
+
+    # File doesn't exist - download audio (this also extracts title from YouTube)
+    if verbose:
+        logger.info(f"  File doesn't exist, proceeding with download...")
+    # Pass title from DB if available to avoid network call if file somehow exists
+    title_from_db = song.title if song else None
+    if verbose and title_from_db:
+        logger.info(f"  Using title from DB to avoid network call: '{title_from_db}'")
+    audio_path, title = await download_audio(
+        song_id,
+        youtube_url,
+        progress_callback=progress_callback,
+        title=title_from_db,
+        verbose=verbose,
+    )
 
     # Update database
+    if verbose:
+        logger.info(f"  Updating database record for {song_id}")
     await create_or_update_song(
         session,
         song_id,
@@ -288,6 +380,8 @@ async def download_audio_for_song(
         lyrics,
         audio_file_path=str(audio_path.resolve()),
     )
+    if verbose:
+        logger.info(f"  ✓ Download complete for {song_id}: '{title}' -> {audio_path}")
 
     return audio_path, title
 
