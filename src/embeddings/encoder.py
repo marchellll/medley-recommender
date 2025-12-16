@@ -159,3 +159,5 @@ def load_embedding(embedding_file: Path) -> np.ndarray:
     return np.array(embedding_list, dtype=np.float32)
 
 
+
+

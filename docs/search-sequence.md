@@ -29,3 +29,5 @@ sequenceDiagram
     API->>API: Combine results<br/>(metadata + similarity scores)
     API-->>User: Return search results<br/>(songs with similarity scores)
 ```
+
+
