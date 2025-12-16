@@ -64,6 +64,10 @@ async def build_index(
     result = await session.execute(select(Song))
     songs_dict = {song.song_id: song for song in result.scalars().all()}
 
+    # Check embedding dimension from first file to detect dimension mismatch
+    first_embedding = None
+    expected_dimension = None
+
     for embedding_file in embedding_files:
         # Extract song_id from relative path (handles subdirectories like youtube/video_id.json)
         # Get relative path from embeddings_dir, then remove .json extension
@@ -72,6 +76,30 @@ async def build_index(
 
         # Load embedding
         embedding = load_embedding(embedding_file)
+
+        # Check dimension on first embedding
+        if first_embedding is None:
+            first_embedding = embedding
+            expected_dimension = len(embedding)
+
+            # Check if existing collection has different dimension
+            if collection.count() > 0:
+                try:
+                    # Try to get existing embedding to check dimension
+                    existing_data = collection.get(limit=1)
+                    if existing_data["embeddings"] and len(existing_data["embeddings"]) > 0:
+                        existing_dimension = len(existing_data["embeddings"][0])
+                        if existing_dimension != expected_dimension:
+                            # Dimension mismatch - clear the collection
+                            existing_ids = collection.get()["ids"]
+                            if existing_ids:
+                                collection.delete(ids=existing_ids)
+                except Exception:
+                    # If we can't check, clear collection to be safe
+                    existing_ids = collection.get()["ids"]
+                    if existing_ids:
+                        collection.delete(ids=existing_ids)
+
         embeddings.append(embedding.tolist())
 
         # Get metadata from database

@@ -288,6 +288,7 @@ async def process_embeddings_step(
     results: dict,
     console: Console,
     quiet: bool,
+    all_songs: bool = False,
 ) -> None:
     """
     Process embeddings generation step.
@@ -305,7 +306,10 @@ async def process_embeddings_step(
 
     if not songs:
         if not quiet:
-            console.print("[blue]⏸ No songs to process (links.json is empty)[/blue]\n")
+            if all_songs:
+                console.print("[blue]⏸ No songs found in database[/blue]\n")
+            else:
+                console.print("[blue]⏸ No songs to process (links.json is empty)[/blue]\n")
         return
 
     if not quiet:
@@ -473,6 +477,8 @@ def main(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
     json_output: bool = typer.Option(False, "--json", help="Output results as JSON"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Minimal output"),
+    all_songs: bool = typer.Option(False, "--all-songs", help="Process ALL songs from database, not just links.json"),
+    clean_embeddings: bool = typer.Option(False, "--clean-embeddings", help="Delete all embedding files before regeneration (implies --all-songs --force --skip-download --skip-metadata)"),
 ) -> None:
     """Process songs through the complete pipeline."""
     start_time = datetime.now()
@@ -514,6 +520,27 @@ def main(
                 console.print(f"[yellow]Warning:[/yellow] Skipping invalid URL: {youtube_url} - {e}")
                 continue
 
+    # If --all-songs is used, load all songs from database instead
+    if all_songs:
+        async def load_all_songs_from_db():
+            async with AsyncSessionLocal() as session:
+                from src.database.db import get_all_songs
+                all_songs_list = await get_all_songs(session)
+                return [
+                    {
+                        "song_id": song.song_id,
+                        "youtube_url": song.youtube_url or "",
+                        "title": song.title or "",
+                    }
+                    for song in all_songs_list
+                ]
+
+        if not quiet:
+            console.print("[cyan]Loading all songs from database...[/cyan]")
+        songs = asyncio.run(load_all_songs_from_db())
+        if not quiet:
+            console.print(f"[cyan]Found {len(songs)} song(s) in database[/cyan]\n")
+
     # Initialize results tracking
     results = {
         song["song_id"]: {
@@ -551,6 +578,44 @@ def main(
         console.print(f"[red]✗ Database initialization failed: {str(e)}[/red]")
         sys.exit(1)
 
+    # Handle --clean-embeddings flag (shorthand for common cleanup scenario)
+    if clean_embeddings:
+        if not quiet:
+            console.print("[yellow]🧹 --clean-embeddings flag detected[/yellow]")
+            console.print("[yellow]This will delete all embedding files and Chroma index, then regenerate them[/yellow]\n")
+        all_songs = True
+        force = True
+        skip_download = True
+        skip_metadata = True
+        skip_index = True  # Skip index by default - user can rebuild separately
+        # Clean embeddings directory
+        embeddings_dir = settings.embeddings_dir
+        if embeddings_dir.exists():
+            deleted_count = 0
+            for embedding_file in embeddings_dir.rglob("*.json"):
+                try:
+                    embedding_file.unlink()
+                    deleted_count += 1
+                except Exception as e:
+                    if not quiet:
+                        console.print(f"[yellow]Warning:[/yellow] Could not delete {embedding_file}: {e}")
+            if not quiet:
+                console.print(f"[green]✓ Deleted {deleted_count} embedding file(s)[/green]")
+
+        # Also delete Chroma index to avoid dimension mismatch errors
+        chroma_db_path = settings.index_dir / "chroma_db"
+        if chroma_db_path.exists():
+            import shutil
+            try:
+                shutil.rmtree(chroma_db_path)
+                if not quiet:
+                    console.print(f"[green]✓ Deleted Chroma index directory[/green]\n")
+                logger.info(f"Deleted Chroma index directory: {chroma_db_path}")
+            except Exception as e:
+                if not quiet:
+                    console.print(f"[yellow]Warning:[/yellow] Could not delete Chroma index: {e}\n")
+                logger.warning(f"Could not delete Chroma index: {e}")
+
     # Create progress display
     if quiet:
         progress = Progress(console=console, disable=True)
@@ -581,18 +646,22 @@ def main(
 
             # Step 3: Embeddings
             await process_embeddings_step(
-                session, songs, progress, force, skip_embeddings, results, console, quiet
+                session, songs, progress, force, skip_embeddings, results, console, quiet, all_songs
             )
 
             # Step 4: Index
             await process_index_step(session, progress, skip_index, results, console, quiet)
 
     try:
+        logger.info("Starting pipeline execution")
         with progress:
+            logger.info("Running async pipeline")
             asyncio.run(run_pipeline())
+            logger.info("Async pipeline completed")
 
         if not quiet:
             console.print("\n[green]✓ Pipeline completed![/green]\n")
+        logger.info("Pipeline completion message displayed")
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Pipeline interrupted by user[/yellow]")
@@ -609,13 +678,17 @@ def main(
         sys.exit(2)
 
     # Calculate statistics
+    logger.info("Starting statistics calculation")
     end_time = datetime.now()
     duration = (end_time - start_time).total_seconds()
+    logger.info(f"Duration calculated: {duration:.2f}s")
 
     successful = len(songs)  # All succeeded if we got here
     failed = 0  # No failures if we got here (would have raised exception)
+    logger.info(f"Statistics: successful={successful}, failed={failed}")
 
     # Display results
+    logger.info("Starting results display")
     if json_output:
         output = {
             "summary": {
@@ -626,8 +699,11 @@ def main(
             },
             "results": results,
         }
+        logger.info("Displaying JSON output")
         console.print(json.dumps(output, indent=2))
+        logger.info("JSON output displayed")
     else:
+        logger.info("Displaying table output")
         # Only show song table if there are songs to process
         if songs:
             # Create summary table
@@ -649,10 +725,13 @@ def main(
                     "✓" if results.get("_index", {}).get("status", "").startswith("✓") else "pending",
                 )
 
+        logger.info("Rendering results table")
         console.print("\n")
         console.print(table)
+        logger.info("Results table rendered")
 
         # Statistics
+        logger.info("Creating statistics table")
         stats_table = Table(title="Statistics", show_header=False)
         stats_table.add_column("Metric", style="cyan")
         stats_table.add_column("Value", style="green")
@@ -663,14 +742,19 @@ def main(
         stats_table.add_row("Index Status", results.get("_index", {}).get("status", "pending"))
         stats_table.add_row("Duration", f"{duration:.2f}s")
 
+        logger.info("Rendering statistics table")
         console.print("\n")
         console.print(stats_table)
+        logger.info("Statistics table rendered")
 
         if not songs:
+            logger.info("Displaying no-songs note")
             console.print("\n[yellow]Note:[/yellow] No songs were processed from links.json, but existing data was preserved.")
             console.print("[yellow]The index was rebuilt from all existing embeddings in the directory.[/yellow]")
 
+    logger.info("All output completed, preparing to exit")
     # Exit code - if we got here, everything succeeded
+    logger.info("Calling sys.exit(0)")
     sys.exit(0)
 
 

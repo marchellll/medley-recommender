@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     # Embedding Model
     embedding_model: str = Field(
-        default="BAAI/bge-small-en-v1.5", alias="EMBEDDING_MODEL"
+        default="BAAI/bge-m3", alias="EMBEDDING_MODEL"
     )
 
     # Logging

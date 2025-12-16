@@ -18,7 +18,7 @@ Build a system that:
 
 ## Features
 
-- 🎵 **Semantic Search**: Find songs by lyrics similarity using BGE embeddings
+- 🎵 **Semantic Search**: Find songs by lyrics similarity using multilingual BGE embeddings (supports Indonesian and 100+ languages)
 - 🎚️ **Metadata Filtering**: Native filtering by BPM, key, and other musical attributes during search
 - 📥 **YouTube Integration**: Automatic audio download from YouTube
 - 🧠 **Local Processing**: All embeddings and indexing done locally
@@ -88,8 +88,15 @@ uv run python scripts/embeddings/process_pipeline.py --input path/to/links.json
 # Force reprocessing
 uv run python scripts/embeddings/process_pipeline.py --force
 
+# Process ALL songs from database (not just links.json)
+uv run python scripts/embeddings/process_pipeline.py --all-songs --force --skip-download --skip-metadata
+
+# Clean and regenerate all embeddings (one-shot command)
+# This deletes all embedding files and regenerates them for all songs in database
+uv run python scripts/embeddings/process_pipeline.py --clean-embeddings --skip-index
+
 # Skip specific steps
-uv run python scripts/embeddings/process_pipeline.py --skip-download --skip-lyrics --skip-metadata
+uv run python scripts/embeddings/process_pipeline.py --skip-download --skip-metadata
 
 # Verbose output
 uv run python scripts/embeddings/process_pipeline.py --verbose
@@ -199,8 +206,17 @@ The master pipeline script (`scripts/embeddings/process_pipeline.py`) orchestrat
 
 1. **Download**: Downloads audio from YouTube URLs (extracts title automatically)
 2. **Metadata**: Extracts BPM, key, duration from audio files
-3. **Embeddings**: Generates semantic embeddings from lyrics (lyrics must be added manually to database)
+3. **Embeddings**: Generates semantic embeddings from lyrics using multilingual BGE-m3 model (supports Indonesian and 100+ languages)
 4. **Index**: Builds ANN index for fast similarity search
+
+### Changing Embedding Models
+
+If you change the embedding model (via `EMBEDDING_MODEL` environment variable or by updating the default in `src/utils/config.py`), you must regenerate all embeddings because different models produce different embedding spaces. Use the cleanup command:
+
+```bash
+# Clean all embeddings and regenerate with new model
+uv run python scripts/embeddings/process_pipeline.py --clean-embeddings --skip-index
+```
 
 ### Features
 
