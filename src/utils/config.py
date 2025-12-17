@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     # Embedding Model
     embedding_model: str = Field(
-        default="BAAI/bge-m3", alias="EMBEDDING_MODEL"
+        default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", alias="EMBEDDING_MODEL"
     )
 
     # Logging
