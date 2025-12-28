@@ -16,7 +16,7 @@ if __name__ == "__main__":
         "--server.port",
         str(settings.streamlit_port),
         "--server.address",
-        settings.api_host,
+        settings.streamlit_host,
     ]
     subprocess.run(cmd)
 

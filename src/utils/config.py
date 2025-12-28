@@ -23,8 +23,10 @@ class Settings(BaseSettings):
     # API Configuration
     api_host: str = Field(default="0.0.0.0", alias="API_HOST")
     api_port: int = Field(default=9876, alias="API_PORT")
+    api_url: str = Field(default="http://localhost:9876", alias="API_URL")
 
     # Streamlit Configuration
+    streamlit_host: str = Field(default="0.0.0.0", alias="STREAMLIT_HOST")
     streamlit_port: int = Field(default=9877, alias="STREAMLIT_PORT")
 
     # Embedding Model

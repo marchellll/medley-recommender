@@ -14,12 +14,15 @@ RUN pip install --no-cache-dir uv
 # Set working directory
 WORKDIR /app
 
-# Copy project files
-COPY pyproject.toml ./
-COPY . .
+# Copy dependency files first for better caching
+# README.md is needed because pyproject.toml references it
+COPY pyproject.toml uv.lock README.md ./
 
-# Install dependencies
+# Install dependencies (this layer will be cached unless pyproject.toml or uv.lock changes)
 RUN uv sync --frozen --no-dev
+
+# Copy the rest of the application code
+COPY . .
 
 # Runtime stage
 FROM python:3.12-slim

@@ -4,8 +4,9 @@
 .gitattributes
 
 # Documentation
-README.md
+# README.md is needed for package build (referenced in pyproject.toml)
 *.md
+!README.md
 
 # Python
 __pycache__/

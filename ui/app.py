@@ -6,8 +6,9 @@ from api.models import AddSongRequest, SearchRequest
 
 from src.utils.config import settings
 
-# Configuration - use port from .env
-API_BASE_URL = f"http://localhost:{settings.api_port}/api"
+# Configuration - use API_URL from .env (defaults to localhost for local dev)
+# In Docker, set API_URL=http://api:9876 to use service name
+API_BASE_URL = f"{settings.api_url}/api"
 
 
 def search_songs(query: str, bpm_min: float | None, bpm_max: float | None, keys: list[str] | None, limit: int) -> dict:
