@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block page_title %}{{ heading }} — Medley{% endblock %}
+
+{% block nav %}
+<a href="/">Search</a>
+<a href="/catalog">Catalog</a>
+{% if is_edit %}
+<a href="/songs/new">Add song</a>
+{% else %}
+<a href="/songs/new" class="active">Add song</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<h1>{{ heading }}</h1>
+<p class="subtitle">{% if is_edit %}Update song details and lyrics.{% else %}Add a new song to the catalog.{% endif %}</p>
+
+{% if let Some(err) = error %}
+<div class="alert alert-error">{{ err }}</div>
+{% endif %}
+
+<div class="card">
+  <form method="post" action="{{ action }}">
+    <label>
+      <span>Title</span>
+      <input name="title" value="{{ title }}" required placeholder="Song title">
+    </label>
+    <label>
+      <span>YouTube URL</span>
+      <input name="youtube_url" value="{{ youtube_url }}" required placeholder="https://www.youtube.com/watch?v=...">
+    </label>
+    <label>
+      <span>Lyrics</span>
+      <textarea name="lyrics" rows="12" required placeholder="Paste full lyrics here">{{ lyrics }}</textarea>
+    </label>
+    <div class="row">
+      <label>
+        <span>BPM</span>
+        <input name="bpm" type="number" step="any" value="{{ bpm }}" required placeholder="120">
+      </label>
+      <label>
+        <span>Key</span>
+        <input name="key" value="{{ key }}" required placeholder="G">
+      </label>
+    </div>
+    <div class="actions" style="margin-top: 0.5rem;">
+      <button type="submit" class="btn btn-primary">Save song</button>
+      <a href="/catalog" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,19 @@
+services:
+  medley:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "9876:9876"
+    volumes:
+      - ./data:/app/data
+      - ./.env:/app/.env:ro
+    environment:
+      - DATABASE_PATH=data/medley.db
+      - EDGE_SHARD_PATH=data/edge_shard
+      - BIND_HOST=0.0.0.0
+      - BIND_PORT=9876
+      - VOYAGE_API_KEY=${VOYAGE_API_KEY:-}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-voyage-4-large}
+      - EMBEDDING_OUTPUT_DIMENSION=${EMBEDDING_OUTPUT_DIMENSION:-2048}
+    restart: unless-stopped

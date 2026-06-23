@@ -1,0 +1,27 @@
+[package]
+name = "medley-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+qdrant-edge.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+dotenvy.workspace = true
+mockall.workspace = true
+regex = "1"
+
+[dev-dependencies]
+tempfile = "3"
+wiremock.workspace = true
+tokio.workspace = true
+sqlx.workspace = true

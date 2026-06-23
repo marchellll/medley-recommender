@@ -1,0 +1,25 @@
+# Rust
+/target/
+
+# Environment
+.env
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data (runtime / generated)
+data/audio/
+data/*.log
+# data/edge_shard/ — committed for deployment (re-run `reindex` then commit after catalog changes)
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db

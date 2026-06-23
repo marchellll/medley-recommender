@@ -1,0 +1,42 @@
+[package]
+name = "medley-server"
+version.workspace = true
+edition.workspace = true
+
+[package.metadata.askama]
+dirs = ["templates"]
+
+[[bin]]
+name = "medley"
+path = "src/main.rs"
+
+[lib]
+name = "medley_server"
+path = "src/lib.rs"
+
+[dependencies]
+medley-core = { path = "../medley-core" }
+anyhow.workspace = true
+askama.workspace = true
+axum.workspace = true
+clap.workspace = true
+rmcp.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+tokio-util = { version = "0.7", features = ["rt"] }
+schemars = "0.8"
+
+[dev-dependencies]
+tempfile = "3"
+http = "1"
+serde_json.workspace = true
+wiremock.workspace = true
+tower = "0.5"
+http-body-util = "0.1"
+hyper = "1"

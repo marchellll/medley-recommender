@@ -1,0 +1,29 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Rust build artifacts
+target/
+
+# Documentation (not needed in image)
+*.md
+!README.md
+
+# Environment (mounted as volume)
+.env
+
+# Local data (mounted as volume)
+data/
+logs/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# CI
+.github/

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block page_title %}Search — Medley{% endblock %}
+
+{% block nav %}
+<a href="/" class="active">Search</a>
+<a href="/catalog">Catalog</a>
+<a href="/songs/new">Add song</a>
+{% endblock %}
+
+{% block content %}
+<h1>Semantic search</h1>
+<p class="subtitle">Find songs by lyrical meaning, not just keywords.</p>
+
+<div class="card">
+  <p class="card-title">Query</p>
+  <form method="post" action="/search">
+    <label>
+      <span>Search lyrics</span>
+      <input name="q" value="{{ q }}" placeholder="e.g. longing for home, upbeat summer vibe" autofocus>
+    </label>
+    <div class="row">
+      <label>
+        <span>BPM min <small>(optional)</small></span>
+        <input name="bpm_min" type="number" step="any" value="{{ bpm_min }}" placeholder="60">
+      </label>
+      <label>
+        <span>BPM max <small>(optional)</small></span>
+        <input name="bpm_max" type="number" step="any" value="{{ bpm_max }}" placeholder="140">
+      </label>
+    </div>
+    <button type="submit" class="btn btn-primary">Search</button>
+  </form>
+</div>
+
+{% if let Some(err) = error %}
+<div class="alert alert-error">{{ err }}</div>
+{% endif %}
+
+{% if !results.is_empty() %}
+<div class="card" style="padding: 0; overflow: hidden;">
+  <p class="card-title" style="padding: 1.25rem 1.5rem 0; margin-bottom: 0;">{{ results.len() }} results</p>
+  <div class="table-wrap" style="border: none; border-radius: 0;">
+    <table>
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Key</th>
+          <th>BPM</th>
+          <th>Score</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in results %}
+        <tr>
+          <td><strong>{{ r.title }}</strong></td>
+          <td><span class="badge">{{ r.key }}</span></td>
+          <td>{{ r.bpm }}</td>
+          <td class="score">{{ r.similarity_score }}</td>
+          <td><a href="{{ r.youtube_url }}" target="_blank" rel="noopener">YouTube ↗</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else if !q.is_empty() && error.is_none() %}
+<p class="empty">No matches for that query.</p>
+{% endif %}
+{% endblock %}
