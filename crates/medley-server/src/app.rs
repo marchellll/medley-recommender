@@ -8,8 +8,10 @@ use medley_core::index::qdrant_edge::EdgeVectorIndex;
 use medley_core::index::tantivy_text::TantivyTextIndex;
 use medley_core::index::{TextIndex, VectorIndex};
 use medley_core::repo::sqlite::SqliteSongRepository;
+use medley_core::repo::submission_sqlite::SubmissionRepository;
 use medley_core::service::search_service::SearchService;
 use medley_core::service::song_service::SongService;
+use medley_core::service::submission_service::SubmissionService;
 
 use crate::auth::{AdminAuth, McpAuth};
 use crate::rate_limit::RateLimiter;
@@ -21,14 +23,16 @@ struct CoreServices {
     embedder: Arc<dyn medley_core::embed::EmbeddingProvider>,
     vector_index: Arc<dyn VectorIndex>,
     text_index: Arc<dyn TextIndex>,
+    submission_repo: SubmissionRepository,
 }
 
 async fn build_core_services(config: &Config) -> anyhow::Result<CoreServices> {
-    let repo = SqliteSongRepository::connect(&config.database_path)
+    let sqlite = SqliteSongRepository::connect(&config.database_path)
         .await
         .context("sqlite connect")?;
-    repo.migrate().await.context("sqlite migrate")?;
-    let repo: Arc<dyn medley_core::repo::SongRepository> = Arc::new(repo);
+    sqlite.migrate().await.context("sqlite migrate")?;
+    let submission_repo = SubmissionRepository::new(sqlite.pool().clone());
+    let repo: Arc<dyn medley_core::repo::SongRepository> = Arc::new(sqlite);
 
     let embedder: Arc<dyn medley_core::embed::EmbeddingProvider> = Arc::new(VoyageClient::new(
         config.voyage_api_key.clone(),
@@ -51,6 +55,7 @@ async fn build_core_services(config: &Config) -> anyhow::Result<CoreServices> {
         embedder,
         vector_index,
         text_index,
+        submission_repo,
     })
 }
 
@@ -88,6 +93,10 @@ pub async fn build_state(config: &Config) -> anyhow::Result<AppState> {
         .ensure_text_index_synced()
         .await
         .context("text index sync")?;
+    let submissions = Arc::new(SubmissionService::new(
+        services.submission_repo,
+        services.repo.clone(),
+    ));
     let search = Arc::new(SearchService::new(
         services.repo,
         services.embedder,
@@ -96,10 +105,12 @@ pub async fn build_state(config: &Config) -> anyhow::Result<AppState> {
 
     Ok(AppState::new(
         songs,
+        submissions,
         search,
         Arc::new(AdminAuth::new(config.admin_token.clone())),
         Arc::new(McpAuth::new(config.api_token.clone())),
         Arc::new(RateLimiter::default()),
+        Arc::new(RateLimiter::per_minute(5)),
     ))
 }
 
@@ -107,9 +118,20 @@ pub fn test_router(state: AppState) -> Router {
     routes::api_router(state).route("/health", axum::routing::get(routes::health))
 }
 
+pub fn test_ui_router(state: AppState) -> Router {
+    routes::ui_router(state)
+}
+
 pub fn admin_bearer(state: &AppState) -> String {
     format!(
         "Bearer {}",
+        state.admin_auth.issue_jwt().expect("admin jwt")
+    )
+}
+
+pub fn admin_cookie(state: &AppState) -> String {
+    format!(
+        "medley_token={}",
         state.admin_auth.issue_jwt().expect("admin jwt")
     )
 }

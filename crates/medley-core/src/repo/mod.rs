@@ -5,6 +5,7 @@ use crate::domain::models::{Song, SongListQuery, SongPatch};
 use crate::domain::pagination::CursorPage;
 
 pub mod sqlite;
+pub mod submission_sqlite;
 
 #[async_trait]
 #[mockall::automock]

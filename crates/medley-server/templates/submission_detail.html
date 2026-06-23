@@ -1,27 +1,20 @@
 {% extends "base.html" %}
 
-{% block page_title %}{{ heading }} — Medley{% endblock %}
+{% block page_title %}Review submission — Medley{% endblock %}
 
 {% block nav %}
 <a href="/">Search</a>
 <a href="/catalog">Catalog</a>
-{% if !is_admin %}
-<a href="/contribute"{% if contribute_active %} class="active"{% endif %}>Contribute</a>
-{% endif %}
-{% if is_admin %}
 <a href="/songs/new">Add song</a>
-<a href="/submissions">Queue</a>
+<a href="/submissions" class="active">Queue</a>
 <form method="post" action="/logout" class="inline-form">
   <button type="submit" class="btn btn-ghost" style="padding: 0.5rem 0.875rem; font-size: 0.9375rem;">Logout</button>
 </form>
-{% else %}
-<a href="/login">Login</a>
-{% endif %}
 {% endblock %}
 
 {% block content %}
-<h1>{{ heading }}</h1>
-<p class="subtitle">{{ subtitle }}</p>
+<h1>Review submission</h1>
+<p class="meta-line">Submitted {{ submitted_at }}</p>
 
 {% if let Some(msg) = success %}
 <div class="alert alert-success">{{ msg }}</div>
@@ -32,7 +25,7 @@
 {% endif %}
 
 <div class="card">
-  <form method="post" action="{{ action }}">
+  <form method="post" action="{{ edit_action }}">
     <label>
       <span>Title</span>
       <input name="title" value="{{ title }}" required placeholder="Song title">
@@ -43,7 +36,7 @@
     </label>
     <label>
       <span>Lyrics</span>
-      <textarea name="lyrics" rows="12" required placeholder="Paste full lyrics here">{{ lyrics }}</textarea>
+      <textarea name="lyrics" rows="12" required placeholder="Full lyrics">{{ lyrics }}</textarea>
     </label>
     <div class="row">
       <label>
@@ -56,9 +49,13 @@
       </label>
     </div>
     <div class="actions" style="margin-top: 0.5rem;">
-      <button type="submit" class="btn btn-primary">{{ submit_label }}</button>
-      <a href="{{ cancel_href }}" class="btn btn-ghost">Cancel</a>
+      <button type="submit" class="btn btn-primary" formaction="{{ approve_action }}">Approve</button>
+      <button type="submit" class="btn btn-ghost" formaction="{{ edit_action }}">Save changes</button>
+      <a href="/submissions" class="btn btn-ghost">Back to queue</a>
     </div>
+  </form>
+  <form method="post" action="{{ delete_action }}" style="margin-top: 0.75rem;">
+    <button type="submit" class="btn btn-danger" onclick="return confirm('Delete this submission?')">Delete submission</button>
   </form>
 </div>
 {% endblock %}

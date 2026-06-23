@@ -56,6 +56,23 @@ pub struct SongPatch {
     pub key: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SongSubmission {
+    pub submission_id: String,
+    pub title: String,
+    pub youtube_url: String,
+    pub lyrics: String,
+    pub bpm: f64,
+    pub key: String,
+    pub submitted_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct SubmissionListQuery {
+    pub limit: Option<u32>,
+    pub last_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct SongListQuery {
     pub q: Option<String>,

@@ -9,3 +9,4 @@ pub use config::Config;
 pub use domain::error::AppError;
 pub use service::search_service::SearchService;
 pub use service::song_service::SongService;
+pub use service::submission_service::SubmissionService;

@@ -18,15 +18,31 @@ use axum::http::StatusCode;
 use crate::auth::{is_mcp_mutation_tool, mcp_mutation_tool_name, optional_admin_from_request, with_mcp_authenticated};
 use crate::state::AppState;
 
-const WINDOW: Duration = Duration::from_secs(60);
-const MAX_REQUESTS: usize = 10;
+const DEFAULT_WINDOW: Duration = Duration::from_secs(60);
+const DEFAULT_MAX_REQUESTS: usize = 10;
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct RateLimiter {
     inner: std::sync::Arc<Mutex<HashMap<IpAddr, Vec<Instant>>>>,
+    max_requests: usize,
+    window: Duration,
+}
+
+impl Default for RateLimiter {
+    fn default() -> Self {
+        Self::per_minute(DEFAULT_MAX_REQUESTS)
+    }
 }
 
 impl RateLimiter {
+    pub fn per_minute(max_requests: usize) -> Self {
+        Self {
+            inner: std::sync::Arc::new(Mutex::new(HashMap::new())),
+            max_requests,
+            window: DEFAULT_WINDOW,
+        }
+    }
+
     pub fn check(&self, ip: IpAddr) -> Result<(), StatusCode> {
         let now = Instant::now();
         let mut guard = self.inner.lock().expect("rate limiter lock");
@@ -34,19 +50,24 @@ impl RateLimiter {
         let count = guard
             .get_mut(&ip)
             .map(|entries| {
-                entries.retain(|t| now.duration_since(*t) < WINDOW);
+                entries.retain(|t| now.duration_since(*t) < self.window);
                 entries.len()
             })
             .unwrap_or(0);
 
-        if count == 0 {
-            guard.remove(&ip);
-        } else if count >= MAX_REQUESTS {
+        if count >= self.max_requests {
             return Err(StatusCode::TOO_MANY_REQUESTS);
         }
 
         guard.entry(ip).or_default().push(now);
         Ok(())
+    }
+
+    pub fn limit_message(&self) -> String {
+        format!(
+            "rate limit exceeded ({}/min per IP)",
+            self.max_requests
+        )
     }
 }
 
@@ -81,7 +102,24 @@ pub async fn http_rate_limit_middleware(
     if state.rate_limit.check(ip).is_err() {
         return (
             StatusCode::TOO_MANY_REQUESTS,
-            Json(serde_json::json!({ "error": "rate limit exceeded (10/min per IP)" })),
+            Json(serde_json::json!({ "error": state.rate_limit.limit_message() })),
+        )
+            .into_response();
+    }
+
+    next.run(req).await
+}
+
+pub async fn submission_rate_limit_middleware(
+    State(state): State<AppState>,
+    req: Request<Body>,
+    next: Next,
+) -> Response {
+    let ip = client_ip(&req);
+    if state.submission_rate_limit.check(ip).is_err() {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(serde_json::json!({ "error": state.submission_rate_limit.limit_message() })),
         )
             .into_response();
     }
@@ -112,7 +150,7 @@ pub async fn mcp_auth_middleware(
     if state.rate_limit.check(ip).is_err() {
         return (
             StatusCode::TOO_MANY_REQUESTS,
-            Json(serde_json::json!({ "error": "rate limit exceeded (10/min per IP)" })),
+            Json(serde_json::json!({ "error": state.rate_limit.limit_message() })),
         )
             .into_response();
     }

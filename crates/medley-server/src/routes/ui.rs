@@ -10,10 +10,10 @@ use axum::{
     http::Request,
     middleware::Next,
 };
-use medley_core::domain::models::{NewSong, SearchQuery, SongListQuery};
+use medley_core::domain::models::{NewSong, SearchQuery, SongListQuery, SubmissionListQuery};
 
 use crate::auth::{admin_cookie_value, clear_admin_cookie, optional_admin_from_request, AdminUser};
-use crate::rate_limit::http_rate_limit_middleware;
+use crate::rate_limit::{http_rate_limit_middleware, submission_rate_limit_middleware};
 use crate::state::AppState;
 
 #[derive(Template)]
@@ -52,15 +52,54 @@ struct CatalogSong {
 #[template(path = "song_form.html")]
 struct SongFormTemplate {
     heading: String,
+    subtitle: String,
     action: String,
-    is_edit: bool,
+    submit_label: String,
+    cancel_href: String,
     title: String,
     youtube_url: String,
     lyrics: String,
     bpm: String,
     key: String,
     error: Option<String>,
+    success: Option<String>,
     is_admin: bool,
+    contribute_active: bool,
+}
+
+#[derive(Template)]
+#[template(path = "submissions.html")]
+struct SubmissionsTemplate {
+    submissions: Vec<SubmissionRow>,
+    next_last_id: Option<String>,
+    has_more: bool,
+    total: i64,
+}
+
+struct SubmissionRow {
+    title: String,
+    key: String,
+    bpm: f64,
+    youtube_url: String,
+    submitted_at: String,
+    review_url: String,
+    delete_url: String,
+}
+
+#[derive(Template)]
+#[template(path = "submission_detail.html")]
+struct SubmissionDetailTemplate {
+    submitted_at: String,
+    title: String,
+    youtube_url: String,
+    lyrics: String,
+    bpm: String,
+    key: String,
+    edit_action: String,
+    approve_action: String,
+    delete_action: String,
+    error: Option<String>,
+    success: Option<String>,
 }
 
 #[derive(Template)]
@@ -74,8 +113,20 @@ pub fn ui_router(state: AppState) -> Router {
         .route("/", get(home))
         .route("/search", post(search_form))
         .route("/catalog", get(catalog))
+        .route("/contribute", get(contribute_form))
         .route("/login", get(login_form).post(login_post))
         .route("/logout", post(logout_post))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            http_rate_limit_middleware,
+        ));
+
+    let contribute_post = Router::new()
+        .route("/contribute", post(contribute_post_handler))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            submission_rate_limit_middleware,
+        ))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             http_rate_limit_middleware,
@@ -88,12 +139,30 @@ pub fn ui_router(state: AppState) -> Router {
             get(edit_song_get).post(update_song_post),
         )
         .route("/songs/{song_id}/delete", post(delete_song_post))
+        .route("/submissions", get(submissions_list))
+        .route("/submissions/{submission_id}", get(submission_detail_get))
+        .route(
+            "/submissions/{submission_id}/edit",
+            post(submission_edit_post),
+        )
+        .route(
+            "/submissions/{submission_id}/approve",
+            post(submission_approve_post),
+        )
+        .route(
+            "/submissions/{submission_id}/delete",
+            post(submission_delete_post),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             require_admin_ui_middleware,
         ));
 
-    Router::new().merge(public).merge(admin).with_state(state)
+    Router::new()
+        .merge(public)
+        .merge(contribute_post)
+        .merge(admin)
+        .with_state(state)
 }
 
 async fn require_admin_ui_middleware(
@@ -121,6 +190,22 @@ fn song_edit_url(song_id: &str) -> String {
 
 fn song_delete_url(song_id: &str) -> String {
     format!("/songs/{song_id}/delete")
+}
+
+fn submission_review_url(submission_id: &str) -> String {
+    format!("/submissions/{submission_id}")
+}
+
+fn submission_delete_url(submission_id: &str) -> String {
+    format!("/submissions/{submission_id}/delete")
+}
+
+fn submission_edit_url(submission_id: &str) -> String {
+    format!("/submissions/{submission_id}/edit")
+}
+
+fn submission_approve_url(submission_id: &str) -> String {
+    format!("/submissions/{submission_id}/approve")
 }
 
 async fn edit_song_get(
@@ -449,15 +534,19 @@ async fn logout_post() -> impl IntoResponse {
 fn new_song_template(error: Option<String>) -> SongFormTemplate {
     SongFormTemplate {
         heading: "Add song".into(),
+        subtitle: "Add a new song to the catalog.".into(),
         action: "/songs/new".into(),
-        is_edit: false,
+        submit_label: "Save song".into(),
+        cancel_href: "/catalog".into(),
         title: String::new(),
         youtube_url: String::new(),
         lyrics: String::new(),
         bpm: String::new(),
         key: "C".into(),
         error,
+        success: None,
         is_admin: true,
+        contribute_active: false,
     }
 }
 
@@ -486,26 +575,51 @@ struct SongForm {
 fn form_template(form: &SongForm) -> SongFormTemplate {
     SongFormTemplate {
         heading: "Add song".into(),
+        subtitle: "Add a new song to the catalog.".into(),
         action: "/songs/new".into(),
-        is_edit: false,
+        submit_label: "Save song".into(),
+        cancel_href: "/catalog".into(),
         title: form.title.clone(),
         youtube_url: form.youtube_url.clone(),
         lyrics: form.lyrics.clone(),
         bpm: form.bpm.clone(),
         key: form.key.clone(),
         error: None,
+        success: None,
         is_admin: true,
+        contribute_active: false,
     }
 }
 
-#[allow(clippy::result_large_err)]
-fn validate_song_form(form: &SongForm) -> Result<NewSong, (SongFormTemplate, String)> {
-    let bpm = parse_required_f64(&form.bpm, "BPM").map_err(|e| (form_template(form), e))?;
-
-    if form.title.trim().is_empty() {
-        return Err((form_template(form), "Title is required".into()));
+fn contribute_template(
+    form: &SongForm,
+    error: Option<String>,
+    success: Option<String>,
+    is_admin: bool,
+) -> SongFormTemplate {
+    SongFormTemplate {
+        heading: "Contribute a song".into(),
+        subtitle: "Suggest a song for the catalog. Submissions are reviewed before publishing.".into(),
+        action: "/contribute".into(),
+        submit_label: "Submit for review".into(),
+        cancel_href: "/".into(),
+        title: form.title.clone(),
+        youtube_url: form.youtube_url.clone(),
+        lyrics: form.lyrics.clone(),
+        bpm: form.bpm.clone(),
+        key: if form.key.is_empty() { "C".into() } else { form.key.clone() },
+        error,
+        success,
+        is_admin,
+        contribute_active: true,
     }
+}
 
+fn parse_song_form(form: &SongForm) -> Result<NewSong, String> {
+    let bpm = parse_required_f64(&form.bpm, "BPM")?;
+    if form.title.trim().is_empty() {
+        return Err("Title is required".into());
+    }
     Ok(NewSong {
         title: form.title.trim().to_string(),
         youtube_url: form.youtube_url.trim().to_string(),
@@ -513,6 +627,19 @@ fn validate_song_form(form: &SongForm) -> Result<NewSong, (SongFormTemplate, Str
         bpm,
         key: form.key.trim().to_string(),
     })
+}
+
+#[allow(clippy::result_large_err)]
+fn validate_song_form(form: &SongForm) -> Result<NewSong, (SongFormTemplate, String)> {
+    parse_song_form(form).map_err(|e| (form_template(form), e))
+}
+
+#[allow(clippy::result_large_err)]
+fn validate_contribute_form(
+    form: &SongForm,
+    is_admin: bool,
+) -> Result<NewSong, (SongFormTemplate, String)> {
+    parse_song_form(form).map_err(|e| (contribute_template(form, Some(e.clone()), None, is_admin), e))
 }
 
 async fn create_song_form(
@@ -549,15 +676,19 @@ async fn edit_song_form(state: AppState, headers: HeaderMap, song_id: String) ->
         Ok(song) => Html(
             SongFormTemplate {
                 heading: format!("Edit: {}", song.title),
+                subtitle: "Update song details and lyrics.".into(),
                 action: song_edit_url(&song_id),
-                is_edit: true,
+                submit_label: "Save song".into(),
+                cancel_href: "/catalog".into(),
                 title: song.title,
                 youtube_url: song.youtube_url,
                 lyrics: song.lyrics,
                 bpm: song.bpm.to_string(),
                 key: song.key,
                 error: None,
+                success: None,
                 is_admin: is_admin(&headers, &state),
+                contribute_active: false,
             }
             .render()
             .unwrap_or_else(|e| e.to_string()),
@@ -570,15 +701,19 @@ async fn edit_song_form(state: AppState, headers: HeaderMap, song_id: String) ->
 fn edit_song_template(song_id: &str, form: &SongForm, error: Option<String>) -> SongFormTemplate {
     SongFormTemplate {
         heading: "Edit song".into(),
+        subtitle: "Update song details and lyrics.".into(),
         action: song_edit_url(song_id),
-        is_edit: true,
+        submit_label: "Save song".into(),
+        cancel_href: "/catalog".into(),
         title: form.title.clone(),
         youtube_url: form.youtube_url.clone(),
         lyrics: form.lyrics.clone(),
         bpm: form.bpm.clone(),
         key: form.key.clone(),
         error,
+        success: None,
         is_admin: true,
+        contribute_active: false,
     }
 }
 
@@ -632,5 +767,263 @@ async fn delete_song_form(state: AppState, song_id: String) -> impl IntoResponse
             tracing::warn!(%song_id, error = %err, "ui POST /songs/:id/delete failed");
             (axum::http::StatusCode::BAD_REQUEST, err.to_string()).into_response()
         }
+    }
+}
+
+#[derive(serde::Deserialize, Default)]
+struct ContributeQuery {
+    #[serde(default)]
+    submitted: Option<String>,
+}
+
+async fn contribute_form(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ContributeQuery>,
+) -> Html<String> {
+    let success = query.submitted.as_deref().is_some_and(|v| v == "1").then(|| {
+        "Thanks! Your submission is in the review queue.".into()
+    });
+    Html(
+        contribute_template(
+            &SongForm::default(),
+            None,
+            success,
+            is_admin(&headers, &state),
+        )
+        .render()
+        .unwrap_or_else(|e| e.to_string()),
+    )
+}
+
+async fn contribute_post_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Form(form): Form<SongForm>,
+) -> impl IntoResponse {
+    let admin = is_admin(&headers, &state);
+    tracing::info!(title = %form.title, youtube_url = %form.youtube_url, "ui POST /contribute");
+    let new_song = match validate_contribute_form(&form, admin) {
+        Ok(v) => v,
+        Err((tpl, _)) => return Html(tpl.render().unwrap_or_else(|e| e.to_string())).into_response(),
+    };
+
+    match state.submissions.submit(new_song).await {
+        Ok(submission) => {
+            tracing::info!(submission_id = %submission.submission_id, "ui POST /contribute ok");
+            Redirect::to("/contribute?submitted=1").into_response()
+        }
+        Err(err) => {
+            tracing::warn!(error = %err, "ui POST /contribute failed");
+            let tpl = contribute_template(&form, Some(err.to_string()), None, admin);
+            Html(tpl.render().unwrap_or_else(|e| e.to_string())).into_response()
+        }
+    }
+}
+
+#[derive(serde::Deserialize, Debug)]
+struct SubmissionsQuery {
+    last_id: Option<String>,
+}
+
+async fn submissions_list(
+    State(state): State<AppState>,
+    Query(query): Query<SubmissionsQuery>,
+) -> Html<String> {
+    let list_query = SubmissionListQuery {
+        limit: Some(20),
+        last_id: query.last_id,
+    };
+    let page = state
+        .submissions
+        .list(list_query)
+        .await
+        .unwrap_or_else(|_| medley_core::domain::pagination::CursorPage {
+            items: vec![],
+            limit: 20,
+            next_last_id: None,
+            next_last_rank: None,
+            has_more: false,
+            total: 0,
+        });
+    let submissions: Vec<SubmissionRow> = page
+        .items
+        .into_iter()
+        .map(|s| SubmissionRow {
+            title: s.title,
+            key: s.key,
+            bpm: s.bpm,
+            youtube_url: s.youtube_url,
+            submitted_at: s.submitted_at.to_rfc3339(),
+            review_url: submission_review_url(&s.submission_id),
+            delete_url: submission_delete_url(&s.submission_id),
+        })
+        .collect();
+    Html(
+        SubmissionsTemplate {
+            submissions,
+            next_last_id: page.next_last_id,
+            has_more: page.has_more,
+            total: page.total,
+        }
+        .render()
+        .unwrap_or_else(|e| e.to_string()),
+    )
+}
+
+fn submission_detail_template(
+    submission_id: &str,
+    submitted_at: &str,
+    form: &SongForm,
+    error: Option<String>,
+    success: Option<String>,
+) -> SubmissionDetailTemplate {
+    SubmissionDetailTemplate {
+        submitted_at: submitted_at.into(),
+        title: form.title.clone(),
+        youtube_url: form.youtube_url.clone(),
+        lyrics: form.lyrics.clone(),
+        bpm: form.bpm.clone(),
+        key: form.key.clone(),
+        edit_action: submission_edit_url(submission_id),
+        approve_action: submission_approve_url(submission_id),
+        delete_action: submission_delete_url(submission_id),
+        error,
+        success,
+    }
+}
+
+fn submission_from_record(
+    submission: &medley_core::domain::models::SongSubmission,
+) -> (String, SongForm) {
+    (
+        submission.submitted_at.to_rfc3339(),
+        SongForm {
+            title: submission.title.clone(),
+            youtube_url: submission.youtube_url.clone(),
+            lyrics: submission.lyrics.clone(),
+            bpm: submission.bpm.to_string(),
+            key: submission.key.clone(),
+        },
+    )
+}
+
+async fn submission_detail_get(
+    State(state): State<AppState>,
+    Path(submission_id): Path<String>,
+    Query(query): Query<ContributeQuery>,
+) -> impl IntoResponse {
+    match state.submissions.get(&submission_id).await {
+        Ok(submission) => {
+            let (submitted_at, form) = submission_from_record(&submission);
+            let success = query.submitted.as_deref().is_some_and(|v| v == "saved").then(|| {
+                "Changes saved.".into()
+            });
+            Html(
+                submission_detail_template(&submission_id, &submitted_at, &form, None, success)
+                    .render()
+                    .unwrap_or_else(|e| e.to_string()),
+            )
+            .into_response()
+        }
+        Err(err) => (StatusCode::NOT_FOUND, err.to_string()).into_response(),
+    }
+}
+
+async fn submission_edit_post(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Path(submission_id): Path<String>,
+    Form(form): Form<SongForm>,
+) -> impl IntoResponse {
+    let submitted_at = match state.submissions.get(&submission_id).await {
+        Ok(s) => s.submitted_at.to_rfc3339(),
+        Err(err) => return (StatusCode::NOT_FOUND, err.to_string()).into_response(),
+    };
+
+    let new_song = match parse_song_form(&form) {
+        Ok(v) => v,
+        Err(err) => {
+            let tpl = submission_detail_template(
+                &submission_id,
+                &submitted_at,
+                &form,
+                Some(err),
+                None,
+            );
+            return Html(tpl.render().unwrap_or_else(|e| e.to_string())).into_response();
+        }
+    };
+
+    match state.submissions.update(&submission_id, new_song).await {
+        Ok(()) => Redirect::to(&format!("/submissions/{submission_id}?saved=1")).into_response(),
+        Err(err) => {
+            let tpl = submission_detail_template(
+                &submission_id,
+                &submitted_at,
+                &form,
+                Some(err.to_string()),
+                None,
+            );
+            Html(tpl.render().unwrap_or_else(|e| e.to_string())).into_response()
+        }
+    }
+}
+
+async fn submission_approve_post(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Path(submission_id): Path<String>,
+    Form(form): Form<SongForm>,
+) -> impl IntoResponse {
+    let submitted_at = match state.submissions.get(&submission_id).await {
+        Ok(s) => s.submitted_at.to_rfc3339(),
+        Err(err) => return (StatusCode::NOT_FOUND, err.to_string()).into_response(),
+    };
+
+    let new_song = match parse_song_form(&form) {
+        Ok(v) => v,
+        Err(err) => {
+            let tpl = submission_detail_template(
+                &submission_id,
+                &submitted_at,
+                &form,
+                Some(err),
+                None,
+            );
+            return Html(tpl.render().unwrap_or_else(|e| e.to_string())).into_response();
+        }
+    };
+
+    match state
+        .submissions
+        .approve(&submission_id, new_song, state.songs.as_ref())
+        .await
+    {
+        Ok(song) => {
+            tracing::info!(song_id = %song.song_id, "ui POST /submissions/:id/approve ok");
+            Redirect::to("/catalog").into_response()
+        }
+        Err(err) => {
+            let tpl = submission_detail_template(
+                &submission_id,
+                &submitted_at,
+                &form,
+                Some(err.to_string()),
+                None,
+            );
+            Html(tpl.render().unwrap_or_else(|e| e.to_string())).into_response()
+        }
+    }
+}
+
+async fn submission_delete_post(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Path(submission_id): Path<String>,
+) -> impl IntoResponse {
+    match state.submissions.delete(&submission_id).await {
+        Ok(()) => Redirect::to("/submissions").into_response(),
+        Err(err) => (StatusCode::BAD_REQUEST, err.to_string()).into_response(),
     }
 }

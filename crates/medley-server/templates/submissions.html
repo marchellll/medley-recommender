@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block page_title %}Submission queue — Medley{% endblock %}
+
+{% block nav %}
+<a href="/">Search</a>
+<a href="/catalog">Catalog</a>
+<a href="/songs/new">Add song</a>
+<a href="/submissions" class="active">Queue</a>
+<form method="post" action="/logout" class="inline-form">
+  <button type="submit" class="btn btn-ghost" style="padding: 0.5rem 0.875rem; font-size: 0.9375rem;">Logout</button>
+</form>
+{% endblock %}
+
+{% block content %}
+<h1>Submission queue</h1>
+<p class="subtitle">{{ total }} pending submission{% if total != 1 %}s{% endif %}</p>
+
+{% if submissions.is_empty() %}
+<p class="empty">No pending submissions.</p>
+{% else %}
+<div class="card" style="padding: 0; overflow: hidden;">
+  <div class="table-wrap" style="border: none; border-radius: 0;">
+    <table>
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Key</th>
+          <th>BPM</th>
+          <th>Submitted</th>
+          <th>Link</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for s in submissions %}
+        <tr>
+          <td><strong>{{ s.title }}</strong></td>
+          <td data-label="Key"><span class="badge">{{ s.key }}</span></td>
+          <td data-label="BPM">{{ s.bpm }}</td>
+          <td data-label="Submitted">{{ s.submitted_at }}</td>
+          <td data-label="Link"><a href="{{ s.youtube_url }}" target="_blank" rel="noopener">YouTube ↗</a></td>
+          <td data-label="">
+            <div class="actions">
+              <a href="{{ s.review_url }}" class="btn btn-ghost" style="padding: 0.4rem 0.75rem; font-size: 0.8125rem;">Review</a>
+              <form method="post" action="{{ s.delete_url }}" class="inline-form">
+                <button type="submit" class="btn btn-danger" onclick="return confirm('Delete this submission?')">Delete</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if has_more %}
+<div class="load-more">
+  <a href="/submissions?last_id={{ next_last_id.as_deref().unwrap_or("") }}" class="btn btn-ghost">Load more</a>
+</div>
+{% endif %}
+{% endblock %}

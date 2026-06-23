@@ -5,8 +5,12 @@
 {% block nav %}
 <a href="/" class="active">Search</a>
 <a href="/catalog">Catalog</a>
+{% if !is_admin %}
+<a href="/contribute">Contribute</a>
+{% endif %}
 {% if is_admin %}
 <a href="/songs/new">Add song</a>
+<a href="/submissions">Queue</a>
 <form method="post" action="/logout" class="inline-form">
   <button type="submit" class="btn btn-ghost" style="padding: 0.5rem 0.875rem; font-size: 0.9375rem;">Logout</button>
 </form>
