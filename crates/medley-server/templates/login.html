@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block page_title %}Login — Medley{% endblock %}
+
+{% block nav %}
+<a href="/">Search</a>
+<a href="/catalog">Catalog</a>
+{% endblock %}
+
+{% block content %}
+<h1>Admin login</h1>
+<p class="subtitle">Enter your admin token to manage the catalog.</p>
+
+{% if let Some(err) = error %}
+<div class="alert alert-error">{{ err }}</div>
+{% endif %}
+
+<div class="card">
+  <form method="post" action="/login">
+    <label>
+      <span>Admin token</span>
+      <input name="token" type="password" required placeholder="ADMIN_TOKEN" autofocus>
+    </label>
+    <button type="submit" class="btn btn-primary">Login</button>
+  </form>
+</div>
+{% endblock %}

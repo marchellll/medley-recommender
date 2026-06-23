@@ -16,7 +16,7 @@ See [docs/song-catalog.md](docs/song-catalog.md) for catalog format and API deta
 
 ## Prerequisites
 
-- Rust 1.76+ (stable)
+- Rust 1.90+ (stable; required by `qdrant-edge` → `roaring`)
 - `VOYAGE_API_KEY` from [Voyage AI](https://dash.voyageai.com/) (required for search and new writes)
 
 ## Quick start
@@ -63,6 +63,16 @@ This deletes `EDGE_SHARD_PATH` and re-embeds every ready song via Voyage.
 | PATCH | `/api/songs/:id` | Update song |
 | DELETE | `/api/songs/:id` | Delete song |
 | POST | `/api/search` | Semantic search |
+| POST | `/api/auth/login` | Exchange `ADMIN_TOKEN` for admin JWT |
+
+## Authentication
+
+| Token | Env var | Used for |
+|-------|---------|----------|
+| Admin | `ADMIN_TOKEN` | HTTP: login at `/login` or `POST /api/auth/login` → JWT cookie/Bearer. Unlocks REST/UI CRUD. |
+| API | `API_TOKEN` | MCP: `Authorization: Bearer <API_TOKEN>` on `/mcp` requests. Unlocks mutation tools. |
+
+Unauthenticated HTTP read/search and all MCP traffic: **10 requests/min per IP**. Admin JWT bypasses the limit on HTTP only.
 
 ## Environment variables
 
@@ -75,6 +85,8 @@ This deletes `EDGE_SHARD_PATH` and re-embeds every ready song via Voyage.
 | `VOYAGE_API_KEY` | — | Voyage API key |
 | `EMBEDDING_MODEL` | `voyage-4-large` | Embedding model |
 | `EMBEDDING_OUTPUT_DIMENSION` | `2048` | Vector size |
+| `ADMIN_TOKEN` | — | HTTP admin login → JWT |
+| `API_TOKEN` | — | MCP Bearer token |
 | `LOG_LEVEL` / `RUST_LOG` | `info` | Log filter (see `main.rs` defaults) |
 
 ## Development

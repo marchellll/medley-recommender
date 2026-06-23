@@ -1,5 +1,5 @@
 # Multi-stage build for medley (Rust single binary)
-FROM rust:1.88-bookworm AS builder
+FROM rust:1.90-bookworm AS builder
 
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./

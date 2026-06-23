@@ -10,6 +10,8 @@ pub struct Config {
     pub embedding_dimension: usize,
     /// Override for tests (`VOYAGE_BASE_URL` in production tooling).
     pub voyage_base_url: String,
+    pub admin_token: String,
+    pub api_token: String,
 }
 
 impl Config {
@@ -38,6 +40,8 @@ impl Config {
             .unwrap_or(2048);
         let voyage_base_url = std::env::var("VOYAGE_BASE_URL")
             .unwrap_or_else(|_| "https://api.voyageai.com".into());
+        let admin_token = std::env::var("ADMIN_TOKEN").unwrap_or_default();
+        let api_token = std::env::var("API_TOKEN").unwrap_or_default();
 
         Self {
             database_path: PathBuf::from(database_path),
@@ -47,6 +51,8 @@ impl Config {
             embedding_model,
             embedding_dimension,
             voyage_base_url,
+            admin_token,
+            api_token,
         }
     }
 

@@ -6,6 +6,7 @@ use rmcp::{
 };
 use serde_json::json;
 
+use crate::auth::require_mcp_authenticated;
 use crate::state::AppState;
 
 #[derive(Clone)]
@@ -99,6 +100,7 @@ impl MedleyMcp {
         &self,
         Parameters(args): Parameters<AddSongArgs>,
     ) -> Result<String, String> {
+        require_mcp_authenticated()?;
         tracing::info!(title = %args.title, "mcp add_song");
         let new_song = medley_core::domain::models::NewSong {
             title: args.title,
@@ -137,6 +139,7 @@ impl MedleyMcp {
         &self,
         Parameters(args): Parameters<UpdateSongArgs>,
     ) -> Result<String, String> {
+        require_mcp_authenticated()?;
         tracing::info!(song_id = %args.song_id, "mcp update_song");
         let patch = medley_core::domain::models::SongPatch {
             title: args.title,
@@ -159,6 +162,7 @@ impl MedleyMcp {
         &self,
         Parameters(args): Parameters<SongIdArgs>,
     ) -> Result<String, String> {
+        require_mcp_authenticated()?;
         tracing::info!(song_id = %args.song_id, "mcp delete_song");
         self.state
             .songs
@@ -199,6 +203,7 @@ impl ServerHandler for MedleyMcp {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::auth::with_mcp_authenticated;
     use crate::app::{build_state, test_config};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -238,6 +243,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn add_song_requires_mcp_auth() {
+        let (_db, _edge, state) = test_state("http://127.0.0.1:9").await;
+        let mcp = MedleyMcp::new(state);
+        let err = mcp
+            .add_song(Parameters(AddSongArgs {
+                title: "Blocked".into(),
+                youtube_url: "https://www.youtube.com/watch?v=blocked1234".into(),
+                lyrics: "nope".into(),
+                bpm: 100.0,
+                key: "C".into(),
+            }))
+            .await;
+        assert!(err.is_err());
+    }
+
+    #[tokio::test]
     async fn add_and_get_song() {
         let server = MockServer::start().await;
         mount_voyage_embeddings(&server).await;
@@ -245,16 +266,18 @@ mod tests {
         let (_db, _edge, state) = test_state(&server.uri()).await;
         let mcp = MedleyMcp::new(state);
 
-        let created = mcp
-            .add_song(Parameters(AddSongArgs {
+        let created = with_mcp_authenticated(
+            true,
+            mcp.add_song(Parameters(AddSongArgs {
                 title: "MCP Song".into(),
                 youtube_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ".into(),
                 lyrics: "mcp lyrics".into(),
                 bpm: 100.0,
                 key: "C".into(),
-            }))
-            .await
-            .unwrap();
+            })),
+        )
+        .await
+        .unwrap();
         let created_json: serde_json::Value = serde_json::from_str(&created).unwrap();
         let song_id = created_json["song_id"].as_str().unwrap().to_string();
 
@@ -275,41 +298,47 @@ mod tests {
         let (_db, _edge, state) = test_state(&server.uri()).await;
         let mcp = MedleyMcp::new(state);
 
-        let created = mcp
-            .add_song(Parameters(AddSongArgs {
+        let created = with_mcp_authenticated(
+            true,
+            mcp.add_song(Parameters(AddSongArgs {
                 title: "To Update".into(),
                 youtube_url: "https://www.youtube.com/watch?v=abc12345678".into(),
                 lyrics: "original".into(),
                 bpm: 90.0,
                 key: "D".into(),
-            }))
-            .await
-            .unwrap();
+            })),
+        )
+        .await
+        .unwrap();
         let song_id = serde_json::from_str::<serde_json::Value>(&created).unwrap()["song_id"]
             .as_str()
             .unwrap()
             .to_string();
 
-        let updated = mcp
-            .update_song(Parameters(UpdateSongArgs {
+        let updated = with_mcp_authenticated(
+            true,
+            mcp.update_song(Parameters(UpdateSongArgs {
                 song_id: song_id.clone(),
                 title: Some("Updated Title".into()),
                 youtube_url: None,
                 lyrics: None,
                 bpm: None,
                 key: None,
-            }))
-            .await
-            .unwrap();
+            })),
+        )
+        .await
+        .unwrap();
         let updated_json: serde_json::Value = serde_json::from_str(&updated).unwrap();
         assert_eq!(updated_json["song"]["title"], "Updated Title");
 
-        let deleted = mcp
-            .delete_song(Parameters(SongIdArgs {
+        let deleted = with_mcp_authenticated(
+            true,
+            mcp.delete_song(Parameters(SongIdArgs {
                 song_id: song_id.clone(),
-            }))
-            .await
-            .unwrap();
+            })),
+        )
+        .await
+        .unwrap();
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&deleted).unwrap()["success"],
             true
@@ -346,13 +375,16 @@ mod tests {
         let (_db, _edge, state) = test_state(&server.uri()).await;
         let mcp = MedleyMcp::new(state);
 
-        mcp.add_song(Parameters(AddSongArgs {
-            title: "Searchable".into(),
-            youtube_url: "https://www.youtube.com/watch?v=search12345".into(),
-            lyrics: "find me in the index".into(),
-            bpm: 110.0,
-            key: "A".into(),
-        }))
+        with_mcp_authenticated(
+            true,
+            mcp.add_song(Parameters(AddSongArgs {
+                title: "Searchable".into(),
+                youtube_url: "https://www.youtube.com/watch?v=search12345".into(),
+                lyrics: "find me in the index".into(),
+                bpm: 110.0,
+                key: "A".into(),
+            })),
+        )
         .await
         .unwrap();
 

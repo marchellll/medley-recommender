@@ -1,7 +1,7 @@
 use axum::body::Body;
 use http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use medley_server::app::{build_state, test_config, test_router};
+use medley_server::app::{admin_bearer, build_state, test_config, test_router};
 use tower::ServiceExt;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -85,7 +85,10 @@ async fn create_song_returns_201_and_indexes() {
         server.uri(),
     );
 
-    let app = test_router(build_state(&config).await.unwrap());
+    let state = build_state(&config).await.unwrap();
+    let auth = admin_bearer(&state);
+    let app = test_router(state);
+
     let body = serde_json::json!({
         "title": "REST Song",
         "youtube_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
@@ -100,6 +103,7 @@ async fn create_song_returns_201_and_indexes() {
                 .method("POST")
                 .uri("/api/songs")
                 .header("content-type", "application/json")
+                .header("authorization", auth)
                 .body(Body::from(body.to_string()))
                 .unwrap(),
         )
@@ -126,7 +130,9 @@ async fn search_returns_indexed_song() {
         server.uri(),
     );
 
-    let app = test_router(build_state(&config).await.unwrap());
+    let state = build_state(&config).await.unwrap();
+    let auth = admin_bearer(&state);
+    let app = test_router(state);
 
     let create_body = serde_json::json!({
         "title": "Indexed",
@@ -141,6 +147,7 @@ async fn search_returns_indexed_song() {
                 .method("POST")
                 .uri("/api/songs")
                 .header("content-type", "application/json")
+                .header("authorization", auth)
                 .body(Body::from(create_body.to_string()))
                 .unwrap(),
         )
@@ -180,7 +187,9 @@ async fn patch_title_skips_reindex_and_search_still_works() {
         server.uri(),
     );
 
-    let app = test_router(build_state(&config).await.unwrap());
+    let state = build_state(&config).await.unwrap();
+    let auth = admin_bearer(&state);
+    let app = test_router(state);
 
     let create_body = serde_json::json!({
         "title": "Original",
@@ -196,6 +205,7 @@ async fn patch_title_skips_reindex_and_search_still_works() {
                 .method("POST")
                 .uri("/api/songs")
                 .header("content-type", "application/json")
+                .header("authorization", auth.clone())
                 .body(Body::from(create_body.to_string()))
                 .unwrap(),
         )
@@ -213,6 +223,7 @@ async fn patch_title_skips_reindex_and_search_still_works() {
                 .method("PATCH")
                 .uri(format!("/api/songs/{song_id}"))
                 .header("content-type", "application/json")
+                .header("authorization", auth)
                 .body(Body::from(patch_body.to_string()))
                 .unwrap(),
         )

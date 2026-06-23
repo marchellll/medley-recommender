@@ -9,6 +9,8 @@ use medley_core::repo::sqlite::SqliteSongRepository;
 use medley_core::service::search_service::SearchService;
 use medley_core::service::song_service::SongService;
 
+use crate::auth::{AdminAuth, McpAuth};
+use crate::rate_limit::RateLimiter;
 use crate::routes;
 use crate::state::AppState;
 
@@ -54,6 +56,13 @@ pub async fn build_song_service(config: &Config) -> anyhow::Result<Arc<SongServi
 }
 
 pub async fn build_state(config: &Config) -> anyhow::Result<AppState> {
+    if config.admin_token.is_empty() {
+        tracing::warn!("ADMIN_TOKEN is not set; HTTP admin login and mutations disabled");
+    }
+    if config.api_token.is_empty() {
+        tracing::warn!("API_TOKEN is not set; MCP mutations disabled");
+    }
+
     let services = build_core_services(config).await?;
     let songs = Arc::new(SongService::new(
         services.repo.clone(),
@@ -66,13 +75,24 @@ pub async fn build_state(config: &Config) -> anyhow::Result<AppState> {
         services.index,
     ));
 
-    Ok(AppState::new(songs, search))
+    Ok(AppState::new(
+        songs,
+        search,
+        Arc::new(AdminAuth::new(config.admin_token.clone())),
+        Arc::new(McpAuth::new(config.api_token.clone())),
+        Arc::new(RateLimiter::default()),
+    ))
 }
 
 pub fn test_router(state: AppState) -> Router {
-    Router::new()
-        .merge(routes::api_router(state))
-        .route("/health", axum::routing::get(routes::health))
+    routes::api_router(state).route("/health", axum::routing::get(routes::health))
+}
+
+pub fn admin_bearer(state: &AppState) -> String {
+    format!(
+        "Bearer {}",
+        state.admin_auth.issue_jwt().expect("admin jwt")
+    )
 }
 
 pub fn test_config(
@@ -88,5 +108,7 @@ pub fn test_config(
         embedding_model: "voyage-4-large".into(),
         embedding_dimension: 8,
         voyage_base_url: voyage_base_url.into(),
+        admin_token: "test-admin-token".into(),
+        api_token: "test-api-token".into(),
     }
 }

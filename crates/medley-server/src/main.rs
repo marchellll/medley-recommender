@@ -1,11 +1,13 @@
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::Context;
-use axum::Router;
+use axum::{middleware, Router};
 use clap::{Parser, Subcommand};
 use medley_core::config::Config;
 use medley_server::app::build_state;
 use medley_server::mcp::MedleyMcp;
+use medley_server::rate_limit::mcp_auth_middleware;
 use medley_server::reindex;
 use medley_server::routes;
 use rmcp::transport::streamable_http_server::{
@@ -79,9 +81,18 @@ async fn serve() -> anyhow::Result<()> {
 
     let app = Router::new()
         .merge(routes::api_router(app_state.clone()))
-        .merge(routes::ui_router(app_state))
+        .merge(routes::ui_router(app_state.clone()))
         .route("/health", axum::routing::get(routes::health))
-        .nest_service("/mcp", mcp_service)
+        .nest(
+            "/mcp",
+            Router::new()
+                .fallback_service(mcp_service)
+                .layer(middleware::from_fn_with_state(
+                    app_state.clone(),
+                    mcp_auth_middleware,
+                ))
+                .with_state(app_state),
+        )
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http());
 
@@ -90,7 +101,10 @@ async fn serve() -> anyhow::Result<()> {
         .with_context(|| format!("failed to bind {}", config.bind_addr))?;
     tracing::info!("medley listening on http://{}", config.bind_addr);
 
-    axum::serve(listener, app)
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
         .with_graceful_shutdown(async move {
             tokio::signal::ctrl_c().await.ok();
             ct.cancel();

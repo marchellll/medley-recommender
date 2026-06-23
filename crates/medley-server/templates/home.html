@@ -5,7 +5,14 @@
 {% block nav %}
 <a href="/" class="active">Search</a>
 <a href="/catalog">Catalog</a>
+{% if is_admin %}
 <a href="/songs/new">Add song</a>
+<form method="post" action="/logout" class="inline-form">
+  <button type="submit" class="btn btn-ghost" style="padding: 0.5rem 0.875rem; font-size: 0.9375rem;">Logout</button>
+</form>
+{% else %}
+<a href="/login">Login</a>
+{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -55,10 +62,10 @@
       {% for r in results %}
         <tr>
           <td><strong>{{ r.title }}</strong></td>
-          <td><span class="badge">{{ r.key }}</span></td>
-          <td>{{ r.bpm }}</td>
-          <td class="score">{{ r.similarity_score }}</td>
-          <td><a href="{{ r.youtube_url }}" target="_blank" rel="noopener">YouTube ↗</a></td>
+          <td data-label="Key"><span class="badge">{{ r.key }}</span></td>
+          <td data-label="BPM">{{ r.bpm }}</td>
+          <td class="score" data-label="Score">{{ r.similarity_score }}</td>
+          <td data-label="Link"><a href="{{ r.youtube_url }}" target="_blank" rel="noopener">YouTube ↗</a></td>
         </tr>
       {% endfor %}
       </tbody>

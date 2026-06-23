@@ -5,10 +5,17 @@
 {% block nav %}
 <a href="/">Search</a>
 <a href="/catalog">Catalog</a>
+{% if is_admin %}
 {% if is_edit %}
 <a href="/songs/new">Add song</a>
 {% else %}
 <a href="/songs/new" class="active">Add song</a>
+{% endif %}
+<form method="post" action="/logout" class="inline-form">
+  <button type="submit" class="btn btn-ghost" style="padding: 0.5rem 0.875rem; font-size: 0.9375rem;">Logout</button>
+</form>
+{% else %}
+<a href="/login">Login</a>
 {% endif %}
 {% endblock %}
 

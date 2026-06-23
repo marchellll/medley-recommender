@@ -161,7 +161,160 @@
     }
 
     @media (max-width: 640px) {
+      .shell {
+        padding: 1rem 1rem 2.5rem;
+        padding-left: max(1rem, env(safe-area-inset-left));
+        padding-right: max(1rem, env(safe-area-inset-right));
+        padding-bottom: max(2.5rem, env(safe-area-inset-bottom));
+      }
+
+      .nav {
+        gap: 0.35rem;
+        padding: 0.65rem 0.75rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .nav .brand {
+        width: 100%;
+        margin-right: 0;
+        margin-bottom: 0.25rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .nav a:not(.brand) {
+        flex: 1 1 calc(50% - 0.2rem);
+        text-align: center;
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .nav .inline-form {
+        flex: 1 1 calc(50% - 0.2rem);
+        display: flex;
+      }
+
+      .nav .inline-form .btn {
+        flex: 1;
+        min-height: 44px;
+      }
+
+      h1 { font-size: 1.5rem; }
+
+      .subtitle { margin-bottom: 1.25rem; }
+
+      .card { padding: 1rem; }
+
       .row { grid-template-columns: 1fr; }
+
+      input, textarea, select {
+        font-size: 16px;
+      }
+
+      form > .btn-primary,
+      .card form .btn-primary {
+        width: 100%;
+      }
+
+      .actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .actions .btn,
+      .actions a.btn {
+        width: 100%;
+        text-align: center;
+      }
+
+      .load-more .btn {
+        width: 100%;
+        max-width: 20rem;
+      }
+
+      .table-wrap {
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .table-wrap table,
+      .table-wrap thead,
+      .table-wrap tbody,
+      .table-wrap th,
+      .table-wrap td,
+      .table-wrap tr {
+        display: block;
+      }
+
+      .table-wrap thead { display: none; }
+
+      .table-wrap tbody tr {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .table-wrap tbody tr:hover td { background: none; }
+
+      .table-wrap tbody tr:last-child { border-bottom: none; }
+
+      .table-wrap td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.35rem 0;
+        border-bottom: none;
+        text-align: right;
+      }
+
+      .table-wrap td::before {
+        content: attr(data-label);
+        font-size: 0.6875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--muted);
+        flex-shrink: 0;
+        text-align: left;
+      }
+
+      .table-wrap td[data-label=""]::before { content: none; }
+
+      .table-wrap td:first-child {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.15rem;
+        padding-top: 0;
+        padding-bottom: 0.75rem;
+        margin-bottom: 0.35rem;
+        border-bottom: 1px solid var(--border);
+        text-align: left;
+      }
+
+      .table-wrap td:first-child::before { content: none; }
+
+      .table-wrap td:has(.actions) {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+        padding-top: 0.75rem;
+        margin-top: 0.25rem;
+        border-top: 1px solid var(--border);
+        text-align: left;
+      }
+
+      .table-wrap td:has(.actions)::before { content: none; }
+
+      .table-wrap td:has(.actions) .actions {
+        flex-direction: row;
+        flex-wrap: wrap;
+      }
+
+      .table-wrap td:has(.actions) .actions .btn {
+        width: auto;
+        flex: 1 1 calc(50% - 0.25rem);
+      }
     }
 
     .btn {

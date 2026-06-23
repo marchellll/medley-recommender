@@ -2,14 +2,17 @@ use axum::{
     Json, Router,
     extract::{Path, Query, State},
     http::StatusCode,
+    middleware,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{get, post, patch},
 };
 use medley_core::domain::error::AppError;
 use medley_core::domain::models::{NewSong, SearchQuery, SongListQuery, SongPatch};
 use medley_core::domain::pagination::CursorPage;
 use serde::Serialize;
 
+use crate::auth::{AdminUser, AuthRejection, LoginRequest, LoginResponse};
+use crate::rate_limit::http_rate_limit_middleware;
 use crate::state::AppState;
 
 struct ApiError(AppError);
@@ -35,13 +38,27 @@ impl IntoResponse for ApiError {
 }
 
 pub fn api_router(state: AppState) -> Router {
-    Router::new()
-        .route("/api/songs", get(list_songs).post(create_song))
+    let public = Router::new()
+        .route("/api/songs", get(list_songs))
+        .route("/api/songs/{song_id}", get(get_song))
+        .route("/api/search", post(search_songs))
+        .route("/api/auth/login", post(api_login))
+        .route("/api/auth/logout", post(api_logout))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            http_rate_limit_middleware,
+        ));
+
+    let admin = Router::new()
+        .route("/api/songs", post(create_song))
         .route(
             "/api/songs/{song_id}",
-            get(get_song).patch(update_song).delete(delete_song),
-        )
-        .route("/api/search", post(search_songs))
+            patch(update_song).delete(delete_song),
+        );
+
+    Router::new()
+        .merge(public)
+        .merge(admin)
         .with_state(state)
 }
 
@@ -53,6 +70,29 @@ pub async fn health() -> &'static str {
 struct SearchResponse {
     results: Vec<medley_core::domain::models::SearchResult>,
     total: usize,
+}
+
+async fn api_login(
+    State(state): State<AppState>,
+    Json(body): Json<LoginRequest>,
+) -> Result<Json<LoginResponse>, AuthRejection> {
+    if !state.admin_auth.enabled() {
+        return Err(AuthRejection::service_unavailable(
+            "ADMIN_TOKEN is not set",
+        ));
+    }
+    if !state.admin_auth.verify_login(&body.token) {
+        return Err(AuthRejection::unauthorized("invalid admin token"));
+    }
+    let token = state
+        .admin_auth
+        .issue_jwt()
+        .map_err(|e| AuthRejection::service_unavailable(e.to_string()))?;
+    Ok(Json(LoginResponse { token }))
+}
+
+async fn api_logout() -> StatusCode {
+    StatusCode::NO_CONTENT
 }
 
 async fn list_songs(
@@ -82,6 +122,7 @@ async fn get_song(
 
 async fn create_song(
     State(state): State<AppState>,
+    _admin: AdminUser,
     Json(body): Json<NewSong>,
 ) -> Result<(StatusCode, Json<medley_core::domain::models::Song>), ApiError> {
     tracing::info!(title = %body.title, youtube_url = %body.youtube_url, "api POST /api/songs");
@@ -92,6 +133,7 @@ async fn create_song(
 
 async fn update_song(
     State(state): State<AppState>,
+    _admin: AdminUser,
     Path(song_id): Path<String>,
     Json(patch): Json<SongPatch>,
 ) -> Result<Json<medley_core::domain::models::Song>, ApiError> {
@@ -103,6 +145,7 @@ async fn update_song(
 
 async fn delete_song(
     State(state): State<AppState>,
+    _admin: AdminUser,
     Path(song_id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
     tracing::info!(%song_id, "api DELETE /api/songs/:id");

@@ -5,7 +5,14 @@
 {% block nav %}
 <a href="/">Search</a>
 <a href="/catalog" class="active">Catalog</a>
+{% if is_admin %}
 <a href="/songs/new">Add song</a>
+<form method="post" action="/logout" class="inline-form">
+  <button type="submit" class="btn btn-ghost" style="padding: 0.5rem 0.875rem; font-size: 0.9375rem;">Logout</button>
+</form>
+{% else %}
+<a href="/login">Login</a>
+{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -24,7 +31,7 @@
 </div>
 
 {% if songs.is_empty() %}
-<p class="empty">No songs found. <a href="/songs/new">Add one</a> or clear your filter.</p>
+<p class="empty">No songs found.{% if is_admin %} <a href="/songs/new">Add one</a> or{% endif %} clear your filter.</p>
 {% else %}
 <div class="card" style="padding: 0; overflow: hidden;">
   <div class="table-wrap" style="border: none; border-radius: 0;">
@@ -35,17 +42,18 @@
           <th>Key</th>
           <th>BPM</th>
           <th>Link</th>
-          <th></th>
+          {% if is_admin %}<th></th>{% endif %}
         </tr>
       </thead>
       <tbody>
       {% for s in songs %}
         <tr>
           <td><strong>{{ s.title }}</strong></td>
-          <td><span class="badge">{{ s.key }}</span></td>
-          <td>{{ s.bpm }}</td>
-          <td><a href="{{ s.youtube_url }}" target="_blank" rel="noopener">YouTube ↗</a></td>
-          <td>
+          <td data-label="Key"><span class="badge">{{ s.key }}</span></td>
+          <td data-label="BPM">{{ s.bpm }}</td>
+          <td data-label="Link"><a href="{{ s.youtube_url }}" target="_blank" rel="noopener">YouTube ↗</a></td>
+          {% if is_admin %}
+          <td data-label="">
             <div class="actions">
               <a href="{{ s.edit_url }}" class="btn btn-ghost" style="padding: 0.4rem 0.75rem; font-size: 0.8125rem;">Edit</a>
               <form method="post" action="{{ s.delete_url }}" class="inline-form">
@@ -53,6 +61,7 @@
               </form>
             </div>
           </td>
+          {% endif %}
         </tr>
       {% endfor %}
       </tbody>

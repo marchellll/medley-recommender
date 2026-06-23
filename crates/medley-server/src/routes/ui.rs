@@ -2,11 +2,18 @@ use askama::Template;
 use axum::{
     Form, Router,
     extract::{Path, Query, State},
-    response::{Html, IntoResponse, Redirect},
+    http::{header, HeaderMap, StatusCode},
+    middleware,
+    response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
+    body::Body,
+    http::Request,
+    middleware::Next,
 };
 use medley_core::domain::models::{NewSong, SearchQuery, SongListQuery};
 
+use crate::auth::{admin_cookie_value, clear_admin_cookie, optional_admin_from_request, AdminUser};
+use crate::rate_limit::http_rate_limit_middleware;
 use crate::state::AppState;
 
 #[derive(Template)]
@@ -17,6 +24,7 @@ struct HomeTemplate {
     bpm_max: String,
     results: Vec<medley_core::domain::models::SearchResult>,
     error: Option<String>,
+    is_admin: bool,
 }
 
 #[derive(Template)]
@@ -28,6 +36,7 @@ struct CatalogTemplate {
     next_last_rank: Option<f64>,
     has_more: bool,
     total: i64,
+    is_admin: bool,
 }
 
 struct CatalogSong {
@@ -51,20 +60,59 @@ struct SongFormTemplate {
     bpm: String,
     key: String,
     error: Option<String>,
+    is_admin: bool,
+}
+
+#[derive(Template)]
+#[template(path = "login.html")]
+struct LoginTemplate {
+    error: Option<String>,
 }
 
 pub fn ui_router(state: AppState) -> Router {
-    Router::new()
+    let public = Router::new()
         .route("/", get(home))
         .route("/search", post(search_form))
         .route("/catalog", get(catalog))
+        .route("/login", get(login_form).post(login_post))
+        .route("/logout", post(logout_post))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            http_rate_limit_middleware,
+        ));
+
+    let admin = Router::new()
         .route("/songs/new", get(new_song_form).post(create_song_form))
         .route(
             "/songs/{song_id}/edit",
             get(edit_song_get).post(update_song_post),
         )
         .route("/songs/{song_id}/delete", post(delete_song_post))
-        .with_state(state)
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_admin_ui_middleware,
+        ));
+
+    Router::new().merge(public).merge(admin).with_state(state)
+}
+
+async fn require_admin_ui_middleware(
+    State(state): State<AppState>,
+    req: Request<Body>,
+    next: Next,
+) -> Response {
+    if optional_admin_from_request(&req, &state.admin_auth) {
+        return next.run(req).await;
+    }
+    Redirect::to("/login").into_response()
+}
+
+fn is_admin(headers: &HeaderMap, state: &AppState) -> bool {
+    state.is_admin_from_cookie_header(
+        headers
+            .get(header::COOKIE)
+            .and_then(|value| value.to_str().ok()),
+    )
 }
 
 fn song_edit_url(song_id: &str) -> String {
@@ -77,13 +125,15 @@ fn song_delete_url(song_id: &str) -> String {
 
 async fn edit_song_get(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(song_id): Path<String>,
 ) -> impl IntoResponse {
-    edit_song_form(state, song_id).await
+    edit_song_form(state, headers, song_id).await
 }
 
 async fn update_song_post(
     State(state): State<AppState>,
+    _admin: AdminUser,
     Path(song_id): Path<String>,
     Form(form): Form<SongForm>,
 ) -> impl IntoResponse {
@@ -92,6 +142,7 @@ async fn update_song_post(
 
 async fn delete_song_post(
     State(state): State<AppState>,
+    _admin: AdminUser,
     Path(song_id): Path<String>,
 ) -> impl IntoResponse {
     delete_song_form(state, song_id).await
@@ -118,7 +169,7 @@ fn parse_required_f64(raw: &str, field: &str) -> Result<f64, String> {
         .map_err(|_| format!("{field} must be a number"))
 }
 
-async fn home() -> Html<String> {
+async fn home(headers: HeaderMap, State(state): State<AppState>) -> Html<String> {
     Html(
         HomeTemplate {
             q: String::new(),
@@ -126,6 +177,7 @@ async fn home() -> Html<String> {
             bpm_max: String::new(),
             results: vec![],
             error: None,
+            is_admin: is_admin(&headers, &state),
         }
         .render()
         .unwrap_or_else(|e| e.to_string()),
@@ -144,8 +196,10 @@ struct SearchForm {
 
 async fn search_form(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Form(form): Form<SearchForm>,
 ) -> Html<String> {
+    let admin = is_admin(&headers, &state);
     let bpm_min = match parse_optional_f64(&form.bpm_min) {
         Ok(v) => v,
         Err(err) => {
@@ -156,6 +210,7 @@ async fn search_form(
                     bpm_max: form.bpm_max,
                     results: vec![],
                     error: Some(format!("BPM min: {err}")),
+                    is_admin: admin,
                 }
                 .render()
                 .unwrap_or_else(|e| e.to_string()),
@@ -172,6 +227,7 @@ async fn search_form(
                     bpm_max: form.bpm_max,
                     results: vec![],
                     error: Some(format!("BPM max: {err}")),
+                    is_admin: admin,
                 }
                 .render()
                 .unwrap_or_else(|e| e.to_string()),
@@ -188,6 +244,7 @@ async fn search_form(
                 bpm_max: form.bpm_max,
                 results: vec![],
                 error: Some("Enter a search query".into()),
+                is_admin: admin,
             }
             .render()
             .unwrap_or_else(|e| e.to_string()),
@@ -211,29 +268,31 @@ async fn search_form(
         Ok(results) => {
             tracing::info!(count = results.len(), "ui POST /search ok");
             Html(
-            HomeTemplate {
-                q: form.q,
-                bpm_min: form.bpm_min,
-                bpm_max: form.bpm_max,
-                results,
-                error: None,
-            }
-            .render()
-            .unwrap_or_else(|e| e.to_string()),
+                HomeTemplate {
+                    q: form.q,
+                    bpm_min: form.bpm_min,
+                    bpm_max: form.bpm_max,
+                    results,
+                    error: None,
+                    is_admin: admin,
+                }
+                .render()
+                .unwrap_or_else(|e| e.to_string()),
             )
         }
         Err(err) => {
             tracing::warn!(error = %err, "ui POST /search failed");
             Html(
-            HomeTemplate {
-                q: form.q,
-                bpm_min: form.bpm_min,
-                bpm_max: form.bpm_max,
-                results: vec![],
-                error: Some(err.to_string()),
-            }
-            .render()
-            .unwrap_or_else(|e| e.to_string()),
+                HomeTemplate {
+                    q: form.q,
+                    bpm_min: form.bpm_min,
+                    bpm_max: form.bpm_max,
+                    results: vec![],
+                    error: Some(err.to_string()),
+                    is_admin: admin,
+                }
+                .render()
+                .unwrap_or_else(|e| e.to_string()),
             )
         }
     }
@@ -248,6 +307,7 @@ struct CatalogQuery {
 
 async fn catalog(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(query): Query<CatalogQuery>,
 ) -> Html<String> {
     tracing::info!(?query, "ui GET /catalog");
@@ -287,6 +347,7 @@ async fn catalog(
             next_last_rank: page.next_last_rank,
             has_more: page.has_more,
             total: page.total,
+            is_admin: is_admin(&headers, &state),
         }
         .render()
         .unwrap_or_else(|e| e.to_string()),
@@ -319,6 +380,72 @@ impl DefaultPage
     }
 }
 
+async fn login_form() -> Html<String> {
+    Html(
+        LoginTemplate { error: None }
+            .render()
+            .unwrap_or_else(|e| e.to_string()),
+    )
+}
+
+#[derive(serde::Deserialize, Default)]
+struct LoginForm {
+    #[serde(default)]
+    token: String,
+}
+
+async fn login_post(State(state): State<AppState>, Form(form): Form<LoginForm>) -> impl IntoResponse {
+    if !state.admin_auth.enabled() {
+        return Html(
+            LoginTemplate {
+                error: Some("ADMIN_TOKEN is not set".into()),
+            }
+            .render()
+            .unwrap_or_else(|e| e.to_string()),
+        )
+        .into_response();
+    }
+    if !state.admin_auth.verify_login(&form.token) {
+        return Html(
+            LoginTemplate {
+                error: Some("Invalid admin token".into()),
+            }
+            .render()
+            .unwrap_or_else(|e| e.to_string()),
+        )
+        .into_response();
+    }
+
+    let jwt = match state.admin_auth.issue_jwt() {
+        Ok(token) => token,
+        Err(err) => {
+            return Html(
+                LoginTemplate {
+                    error: Some(err.to_string()),
+                }
+                .render()
+                .unwrap_or_else(|e| e.to_string()),
+            )
+            .into_response();
+        }
+    };
+
+    (
+        StatusCode::SEE_OTHER,
+        [(header::SET_COOKIE, admin_cookie_value(&jwt))],
+        Redirect::to("/catalog"),
+    )
+        .into_response()
+}
+
+async fn logout_post() -> impl IntoResponse {
+    (
+        StatusCode::SEE_OTHER,
+        [(header::SET_COOKIE, clear_admin_cookie())],
+        Redirect::to("/"),
+    )
+}
+
 fn new_song_template(error: Option<String>) -> SongFormTemplate {
     SongFormTemplate {
         heading: "Add song".into(),
@@ -330,6 +457,7 @@ fn new_song_template(error: Option<String>) -> SongFormTemplate {
         bpm: String::new(),
         key: "C".into(),
         error,
+        is_admin: true,
     }
 }
 
@@ -366,6 +494,7 @@ fn form_template(form: &SongForm) -> SongFormTemplate {
         bpm: form.bpm.clone(),
         key: form.key.clone(),
         error: None,
+        is_admin: true,
     }
 }
 
@@ -388,6 +517,7 @@ fn validate_song_form(form: &SongForm) -> Result<NewSong, (SongFormTemplate, Str
 
 async fn create_song_form(
     State(state): State<AppState>,
+    _admin: AdminUser,
     Form(form): Form<SongForm>,
 ) -> impl IntoResponse {
     tracing::info!(title = %form.title, youtube_url = %form.youtube_url, "ui POST /songs/new");
@@ -413,7 +543,7 @@ async fn create_song_form(
     }
 }
 
-async fn edit_song_form(state: AppState, song_id: String) -> impl IntoResponse {
+async fn edit_song_form(state: AppState, headers: HeaderMap, song_id: String) -> impl IntoResponse {
     tracing::info!(%song_id, "ui GET /songs/:id/edit");
     match state.songs.get(&song_id).await {
         Ok(song) => Html(
@@ -427,6 +557,7 @@ async fn edit_song_form(state: AppState, song_id: String) -> impl IntoResponse {
                 bpm: song.bpm.to_string(),
                 key: song.key,
                 error: None,
+                is_admin: is_admin(&headers, &state),
             }
             .render()
             .unwrap_or_else(|e| e.to_string()),
@@ -447,6 +578,7 @@ fn edit_song_template(song_id: &str, form: &SongForm, error: Option<String>) -> 
         bpm: form.bpm.clone(),
         key: form.key.clone(),
         error,
+        is_admin: true,
     }
 }
 
