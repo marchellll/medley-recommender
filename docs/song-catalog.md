@@ -1,6 +1,6 @@
 # Song Catalog
 
-Medley stores worship songs in **SQLite** (`data/medley.db`). The committed database is the catalog source of truth; the Rust binary adds **FTS5** keyword search on top without removing existing rows.
+Medley stores worship songs in **SQLite** (`data/medley.db`). The committed database is the catalog source of truth. Keyword search uses an embedded **Tantivy** index at `data/text_index/` (prefix + fuzzy matching on title and lyrics).
 
 ## Required fields
 
@@ -16,17 +16,16 @@ Medley stores worship songs in **SQLite** (`data/medley.db`). The committed data
 
 Each song gets a **UUID v7** primary key at creation time (time-ordered, URL-safe). The YouTube URL is stored separately and must be unique across the catalog.
 
-Legacy databases with `youtube/{video_id}` keys are rewritten to UUID v7 automatically on startup (row data and FTS preserved).
+Legacy databases with `youtube/{video_id}` keys are rewritten to UUID v7 automatically on startup.
 
 ## Existing `medley.db`
 
 The Rust migrations are **additive only**:
 
 - `CREATE TABLE IF NOT EXISTS` — does not replace a legacy schema (extra columns such as `embedding_file_path` are kept)
-- FTS5 virtual table + triggers are added if missing
-- FTS **rebuild** backfills search index from existing rows; it does **not** delete catalog data
+- Legacy FTS5 tables are dropped by migration `003_drop_songs_fts.sql`
 
-`medley serve` runs additive migrations on startup and backfills FTS when needed.
+`medley serve` runs migrations on startup and rebuilds the Tantivy index from SQLite when doc counts diverge.
 
 ## Adding songs
 
@@ -44,11 +43,11 @@ curl -X POST http://localhost:9876/api/songs \
   }'
 ```
 
-Create/update/delete embed and sync the vector index inline (Voyage + Qdrant Edge). No batch pipeline.
+Create/update/delete embed and sync the vector + text indexes inline (Voyage + Qdrant Edge + Tantivy). No batch pipeline.
 
 ### Web UI
 
-Open `http://localhost:9876` — search, catalog browse (FTS + cursor pagination), add/edit/delete.
+Open `http://localhost:9876` — search, catalog browse (keyword search + cursor pagination), add/edit/delete.
 
 ### MCP
 
@@ -60,11 +59,11 @@ Streamable HTTP at `http://localhost:9876/mcp` — tools: `add_song`, `update_so
 
 | Param | Purpose |
 |-------|---------|
-| `q` | FTS keyword search (title + lyrics) |
+| `q` | Tantivy keyword search (title + lyrics; prefix + typo-tolerant) |
 | `key`, `bpm_min`, `bpm_max` | Filters |
 | `limit` | Page size (default 20, max 100) |
 | `last_id` | Cursor for page 2+ |
-| `last_rank` | Required with `last_id` when `q` is set (BM25 tiebreaker) |
+| `last_rank` | Required with `last_id` when `q` is set (score tiebreaker) |
 
 ## Validation
 

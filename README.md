@@ -1,6 +1,6 @@
 # Medley Recommender
 
-Worship song recommender: **Voyage AI** lyric embeddings (`voyage-4-large`, 2048-dim), manual BPM/key metadata, **SQLite FTS5** catalog search, **Qdrant Edge** semantic search.
+Worship song recommender: **Voyage AI** lyric embeddings (`voyage-4-large`, 2048-dim), manual BPM/key metadata, **Tantivy** catalog keyword search (prefix + fuzzy), **Qdrant Edge** semantic search.
 
 Single Rust binary — REST, web UI, and MCP on one port.
 
@@ -9,7 +9,7 @@ See [docs/song-catalog.md](docs/song-catalog.md) for catalog format and API deta
 ## Features
 
 - Semantic search (Voyage query embeddings + Qdrant Edge)
-- FTS5 keyword catalog browse with stable cursor pagination
+- Tantivy keyword catalog browse (prefix + typo-tolerant) with stable cursor pagination
 - Song CRUD via REST, web UI, and MCP (`/mcp`)
 - Existing `data/medley.db` preserved on upgrade (additive migrations)
 - Docker-ready
@@ -42,6 +42,7 @@ Open `http://localhost:9876` · MCP at `http://localhost:9876/mcp`
 data/
   medley.db           # SQLite catalog (committed)
   edge_shard/         # Qdrant Edge vectors (committed; semantic search works out of the box)
+  text_index/         # Tantivy keyword index (rebuilt on startup if missing/out of sync)
 ```
 
 Both `medley.db` and `edge_shard/` are checked in so a fresh clone is deployable without calling Voyage for every song. After adding or bulk-updating songs, run `reindex` and commit the updated `edge_shard/`.
@@ -57,7 +58,7 @@ This deletes `EDGE_SHARD_PATH` and re-embeds every ready song via Voyage.
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/health` | Health check |
-| GET | `/api/songs` | Catalog list / FTS (`q`, cursor pagination) |
+| GET | `/api/songs` | Catalog list / keyword search (`q`, cursor pagination) |
 | POST | `/api/songs` | Create song (embed + index inline) |
 | GET | `/api/songs/:id` | Get song |
 | PATCH | `/api/songs/:id` | Update song |
@@ -80,6 +81,7 @@ Unauthenticated HTTP read/search and all MCP traffic: **10 requests/min per IP**
 |----------|---------|-------------|
 | `DATABASE_PATH` | `data/medley.db` | SQLite catalog |
 | `EDGE_SHARD_PATH` | `data/edge_shard` | Qdrant Edge shard directory |
+| `TEXT_INDEX_PATH` | `data/text_index` | Tantivy keyword index directory |
 | `BIND_HOST` / `API_HOST` | `0.0.0.0` | Listen host |
 | `BIND_PORT` / `API_PORT` | `9876` | Listen port |
 | `VOYAGE_API_KEY` | — | Voyage API key |

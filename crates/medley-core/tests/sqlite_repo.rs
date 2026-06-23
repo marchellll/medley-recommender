@@ -44,42 +44,6 @@ async fn crud_round_trip() {
 }
 
 #[tokio::test]
-async fn fts_matches_lyrics() {
-    let (_dir, repo) = setup_repo().await;
-    let alpha = sample_song("aaa11111111", "Alpha", "shalom peace everywhere");
-    let alpha_id = alpha.song_id.clone();
-    repo.insert(&alpha).await.unwrap();
-    repo.insert(&sample_song(
-        "bbb22222222",
-        "Beta",
-        "totally different words",
-    ))
-    .await
-    .unwrap();
-
-    sqlx::query("INSERT INTO songs_fts(songs_fts) VALUES('rebuild')")
-        .execute(repo.pool())
-        .await
-        .unwrap();
-
-    let page = repo
-        .list(&SongListQuery {
-            q: Some("shalom".into()),
-            key: None,
-            bpm_min: None,
-            bpm_max: None,
-            limit: Some(10),
-            last_id: None,
-            last_rank: None,
-        })
-        .await
-        .unwrap();
-
-    assert_eq!(page.items.len(), 1);
-    assert_eq!(page.items[0].song_id, alpha_id);
-}
-
-#[tokio::test]
 async fn stable_plain_pagination() {
     let (_dir, repo) = setup_repo().await;
     for i in 0..5 {
@@ -185,4 +149,66 @@ async fn legacy_youtube_ids_migrated_to_uuid() {
         .expect("song preserved");
     assert!(Uuid::parse_str(&song.song_id).is_ok());
     assert_eq!(song.title, "Legacy Song");
+}
+
+#[tokio::test]
+async fn migration_normalizes_youtube_urls() {
+    let dir = tempfile::tempdir().unwrap();
+    let db_path = dir.path().join("medley.db");
+    sqlx::migrate!("./migrations")
+        .run(&sqlx::sqlite::SqlitePoolOptions::new()
+            .connect(&format!("sqlite:{}?mode=rwc", db_path.display()))
+            .await
+            .unwrap())
+        .await
+        .unwrap();
+
+    let now = Utc::now();
+    sqlx::query(
+        "INSERT INTO songs (song_id, title, youtube_url, lyrics, bpm, key, created_at, updated_at) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind("019ade09-0000-7000-8000-000000000099")
+    .bind("Query Params Song")
+    .bind("https://www.youtube.com/watch?v=query123456&list=PLabc&t=10")
+    .bind("lyrics")
+    .bind(100.0)
+    .bind("G")
+    .bind(now.to_rfc3339())
+    .bind(now.to_rfc3339())
+    .execute(
+        &sqlx::sqlite::SqlitePoolOptions::new()
+            .connect(&format!("sqlite:{}?mode=rwc", db_path.display()))
+            .await
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+
+    let repo = medley_core::repo::sqlite::SqliteSongRepository::connect(&db_path)
+        .await
+        .unwrap();
+    repo.migrate().await.unwrap();
+
+    let song = repo
+        .get("019ade09-0000-7000-8000-000000000099")
+        .await
+        .unwrap()
+        .expect("song preserved");
+    assert_eq!(
+        song.youtube_url,
+        "https://www.youtube.com/watch?v=query123456"
+    );
+}
+
+#[tokio::test]
+async fn migration_drops_songs_fts() {
+    let (_dir, repo) = setup_repo().await;
+    let fts_exists: (i64,) = sqlx::query_as(
+        "SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'songs_fts'",
+    )
+    .fetch_one(repo.pool())
+    .await
+    .unwrap();
+    assert_eq!(fts_exists.0, 0);
 }

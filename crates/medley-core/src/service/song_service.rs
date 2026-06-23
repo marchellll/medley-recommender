@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::Utc;
@@ -8,8 +9,9 @@ use crate::domain::lyrics::clean_lyrics;
 use crate::domain::models::{NewSong, Song, SongListQuery, SongPatch};
 use crate::domain::pagination::CursorPage;
 use crate::domain::validation::{song_readiness_issues, validate_new_song, validate_patch};
+use crate::domain::youtube::normalize_youtube_url;
 use crate::embed::{EmbeddingProvider, InputType};
-use crate::index::VectorIndex;
+use crate::index::{TextIndex, VectorIndex};
 use crate::repo::SongRepository;
 
 #[derive(Debug, Clone, Copy)]
@@ -22,19 +24,22 @@ pub struct ReindexReport {
 pub struct SongService {
     repo: Arc<dyn SongRepository>,
     embedder: Arc<dyn EmbeddingProvider>,
-    index: Arc<dyn VectorIndex>,
+    vector_index: Arc<dyn VectorIndex>,
+    text_index: Arc<dyn TextIndex>,
 }
 
 impl SongService {
     pub fn new(
         repo: Arc<dyn SongRepository>,
         embedder: Arc<dyn EmbeddingProvider>,
-        index: Arc<dyn VectorIndex>,
+        vector_index: Arc<dyn VectorIndex>,
+        text_index: Arc<dyn TextIndex>,
     ) -> Self {
         Self {
             repo,
             embedder,
-            index,
+            vector_index,
+            text_index,
         }
     }
 
@@ -51,7 +56,11 @@ impl SongService {
 
     pub async fn list(&self, query: SongListQuery) -> Result<CursorPage<Song>, AppError> {
         tracing::debug!(?query, "song_service.list");
-        let page = self.repo.list(&query).await?;
+        let page = if query.q.as_ref().is_some_and(|q| !q.trim().is_empty()) {
+            self.list_text(query).await?
+        } else {
+            self.repo.list(&query).await?
+        };
         tracing::info!(
             returned = page.items.len(),
             total = page.total,
@@ -61,7 +70,35 @@ impl SongService {
         Ok(page)
     }
 
+    async fn list_text(&self, query: SongListQuery) -> Result<CursorPage<Song>, AppError> {
+        let text_page = self.text_index.search(&query).await?;
+        let song_ids: Vec<String> = text_page
+            .hits
+            .iter()
+            .map(|hit| hit.song_id.clone())
+            .collect();
+        let songs = self.repo.get_many(&song_ids).await?;
+        let mut by_id: HashMap<String, Song> = songs
+            .into_iter()
+            .map(|song| (song.song_id.clone(), song))
+            .collect();
+        let items: Vec<Song> = song_ids
+            .iter()
+            .filter_map(|id| by_id.remove(id))
+            .collect();
+
+        Ok(CursorPage {
+            items,
+            limit: text_page.limit,
+            next_last_id: text_page.next_last_id,
+            next_last_rank: text_page.next_last_rank,
+            has_more: text_page.has_more,
+            total: text_page.total,
+        })
+    }
+
     pub async fn create(&self, mut input: NewSong) -> Result<Song, AppError> {
+        input.youtube_url = normalize_youtube_url(&input.youtube_url)?;
         tracing::info!(title = %input.title, youtube_url = %input.youtube_url, "song_service.create");
         validate_new_song(&input)?;
         if self.repo.exists_by_youtube_url(&input.youtube_url).await? {
@@ -94,13 +131,17 @@ impl SongService {
         }
 
         self.repo.insert(&song).await?;
+        self.text_index.upsert(&song).await?;
         self.index_song(&song, &input.lyrics).await?;
-        self.index.flush().await?;
+        self.vector_index.flush().await?;
         tracing::info!(song_id = %song.song_id, title = %song.title, "song_service.create ok");
         Ok(song)
     }
 
-    pub async fn update(&self, song_id: &str, patch: SongPatch) -> Result<Song, AppError> {
+    pub async fn update(&self, song_id: &str, mut patch: SongPatch) -> Result<Song, AppError> {
+        if let Some(url) = patch.youtube_url.take() {
+            patch.youtube_url = Some(normalize_youtube_url(&url)?);
+        }
         tracing::info!(%song_id, ?patch, "song_service.update");
         validate_patch(&patch)?;
         if let Some(url) = &patch.youtube_url {
@@ -115,8 +156,17 @@ impl SongService {
         }
         let updated = self.repo.update(song_id, &patch).await?;
 
-        let needs_reindex = patch.lyrics.is_some() || patch.bpm.is_some() || patch.key.is_some();
-        if needs_reindex {
+        let needs_text_index = patch.title.is_some()
+            || patch.lyrics.is_some()
+            || patch.bpm.is_some()
+            || patch.key.is_some();
+        if needs_text_index {
+            self.text_index.upsert(&updated).await?;
+        }
+
+        let needs_vector_reindex =
+            patch.lyrics.is_some() || patch.bpm.is_some() || patch.key.is_some();
+        if needs_vector_reindex {
             let issues = song_readiness_issues(&updated);
             if !issues.is_empty() {
                 tracing::warn!(%song_id, ?issues, "song_service.update validation failed");
@@ -126,18 +176,24 @@ impl SongService {
                 )));
             }
             self.index_song(&updated, &updated.lyrics).await?;
-            self.index.flush().await?;
+            self.vector_index.flush().await?;
         }
 
-        tracing::info!(%song_id, title = %updated.title, reindexed = needs_reindex, "song_service.update ok");
+        tracing::info!(
+            %song_id,
+            title = %updated.title,
+            reindexed = needs_vector_reindex,
+            "song_service.update ok"
+        );
         Ok(updated)
     }
 
     pub async fn delete(&self, song_id: &str) -> Result<(), AppError> {
         tracing::info!(%song_id, "song_service.delete");
         self.repo.delete(song_id).await?;
-        self.index.delete(song_id).await?;
-        self.index.flush().await?;
+        self.text_index.delete(song_id).await?;
+        self.vector_index.delete(song_id).await?;
+        self.vector_index.flush().await?;
         tracing::info!(%song_id, "song_service.delete ok");
         Ok(())
     }
@@ -200,7 +256,7 @@ impl SongService {
                     )));
                 }
                 for (song, vector) in ready.iter().zip(vectors) {
-                    self.index
+                    self.vector_index
                         .upsert(&song.song_id, vector, &song.key, song.bpm)
                         .await?;
                     indexed += 1;
@@ -214,7 +270,7 @@ impl SongService {
             last_rank = page.next_last_rank;
         }
 
-        self.index.flush().await?;
+        self.vector_index.flush().await?;
         tracing::info!(
             total_songs,
             indexed,
@@ -228,6 +284,60 @@ impl SongService {
         })
     }
 
+    pub async fn ensure_text_index_synced(&self) -> Result<(), AppError> {
+        let catalog_count = self
+            .repo
+            .list(&SongListQuery {
+                q: None,
+                key: None,
+                bpm_min: None,
+                bpm_max: None,
+                limit: Some(1),
+                last_id: None,
+                last_rank: None,
+            })
+            .await?
+            .total as u64;
+        let index_count = self.text_index.doc_count().await?;
+        if catalog_count == index_count {
+            return Ok(());
+        }
+
+        tracing::info!(
+            catalog_count,
+            index_count,
+            "rebuilding text index from catalog"
+        );
+        let songs = self.load_all_songs().await?;
+        self.text_index.rebuild(&songs).await?;
+        Ok(())
+    }
+
+    async fn load_all_songs(&self) -> Result<Vec<Song>, AppError> {
+        let mut songs = Vec::new();
+        let mut last_id: Option<String> = None;
+        loop {
+            let page = self
+                .repo
+                .list(&SongListQuery {
+                    q: None,
+                    key: None,
+                    bpm_min: None,
+                    bpm_max: None,
+                    limit: Some(100),
+                    last_id: last_id.clone(),
+                    last_rank: None,
+                })
+                .await?;
+            songs.extend(page.items);
+            if !page.has_more {
+                break;
+            }
+            last_id = page.next_last_id;
+        }
+        Ok(songs)
+    }
+
     async fn index_song(&self, song: &Song, lyrics: &str) -> Result<(), AppError> {
         tracing::debug!(song_id = %song.song_id, "song_service.index_song");
         let vectors = self
@@ -238,7 +348,7 @@ impl SongService {
             .into_iter()
             .next()
             .ok_or_else(|| AppError::Embedding("empty embedding response".into()))?;
-        self.index
+        self.vector_index
             .upsert(&song.song_id, vector, &song.key, song.bpm)
             .await
     }

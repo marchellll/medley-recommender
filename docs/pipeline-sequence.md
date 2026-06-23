@@ -1,12 +1,13 @@
 # Catalog Write Sequence
 
-Songs are written through **REST**, **UI**, or **MCP**; `SongService` keeps SQLite, FTS5, Voyage, and Qdrant Edge in sync.
+Songs are written through **REST**, **UI**, or **MCP**; `SongService` keeps SQLite, Tantivy, Voyage, and Qdrant Edge in sync.
 
 ## Storage
 
 | Asset | Location | Notes |
 |-------|----------|--------|
-| Catalog | `data/medley.db` | SQLite + FTS5 |
+| Catalog | `data/medley.db` | SQLite rows only |
+| Keywords | `data/text_index/` | Tantivy index (synced on writes; rebuilt on startup if out of sync) |
 | Vectors | `data/edge_shard/` | Qdrant Edge shard (created/updated on each write) |
 
 ## Write path (create / update / delete)
@@ -19,7 +20,8 @@ sequenceDiagram
     participant Repo as SqliteSongRepository
     participant Voyage as VoyageClient
     participant Edge as Qdrant Edge
-    participant DB as SQLite + FTS5
+    participant Text as Tantivy
+    participant DB as SQLite
 
     Client->>SongSvc: create / update / delete
 
@@ -30,19 +32,24 @@ sequenceDiagram
 
     alt create
         SongSvc->>Repo: insert
-        Repo->>DB: INSERT songs (+ FTS trigger)
+        Repo->>DB: INSERT songs
+        SongSvc->>Text: upsert(song)
         SongSvc->>Voyage: embed(lyrics, document)
         SongSvc->>Edge: upsert(song_id, vector, key, bpm)
         SongSvc->>Edge: flush
-    else update (lyrics/bpm/key changed)
+    else update (title/lyrics/bpm/key changed)
         SongSvc->>Repo: update
-        Repo->>DB: UPDATE songs (+ FTS trigger)
-        SongSvc->>Voyage: re-embed if needed
-        SongSvc->>Edge: upsert
-        SongSvc->>Edge: flush
+        Repo->>DB: UPDATE songs
+        SongSvc->>Text: upsert(song)
+        opt lyrics/bpm/key changed
+            SongSvc->>Voyage: re-embed
+            SongSvc->>Edge: upsert
+            SongSvc->>Edge: flush
+        end
     else delete
         SongSvc->>Repo: delete
-        Repo->>DB: DELETE songs (+ FTS trigger)
+        Repo->>DB: DELETE songs
+        SongSvc->>Text: delete(song_id)
         SongSvc->>Edge: delete(song_id)
         SongSvc->>Edge: flush
     end

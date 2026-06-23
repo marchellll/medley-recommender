@@ -1,5 +1,11 @@
 use crate::domain::error::AppError;
 
+/// Canonical watch URL with no query params or fragments.
+pub fn normalize_youtube_url(youtube_url: &str) -> Result<String, AppError> {
+    let id = extract_video_id(youtube_url)?;
+    Ok(format!("https://www.youtube.com/watch?v={id}"))
+}
+
 pub fn extract_video_id(youtube_url: &str) -> Result<String, AppError> {
     let patterns = [
         r"(?:youtube\.com/watch\?v=|youtu\.be/)([A-Za-z0-9_-]{11})",
@@ -42,5 +48,20 @@ mod tests {
     #[test]
     fn rejects_invalid_url() {
         assert!(extract_video_id("https://example.com/not-youtube").is_err());
+    }
+
+    #[test]
+    fn normalize_strips_query_params() {
+        let url = normalize_youtube_url(
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLabc&t=42",
+        )
+        .unwrap();
+        assert_eq!(url, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    }
+
+    #[test]
+    fn normalize_youtu_be_to_watch_url() {
+        let url = normalize_youtube_url("https://youtu.be/dQw4w9WgXcQ?t=10").unwrap();
+        assert_eq!(url, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
     }
 }

@@ -14,6 +14,7 @@
 # Data (runtime / generated)
 data/audio/
 data/*.log
+data/text_index/
 # data/edge_shard/ — committed for deployment (re-run `reindex` then commit after catalog changes)
 
 # Logs

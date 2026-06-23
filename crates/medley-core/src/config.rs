@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 pub struct Config {
     pub database_path: PathBuf,
     pub edge_shard_path: PathBuf,
+    pub text_index_path: PathBuf,
     pub bind_addr: String,
     pub voyage_api_key: String,
     pub embedding_model: String,
@@ -25,6 +26,8 @@ impl Config {
             .unwrap_or_else(|_| "data/medley.db".into());
         let edge_shard_path = std::env::var("EDGE_SHARD_PATH")
             .unwrap_or_else(|_| "data/edge_shard".into());
+        let text_index_path = std::env::var("TEXT_INDEX_PATH")
+            .unwrap_or_else(|_| "data/text_index".into());
         let bind_host = std::env::var("BIND_HOST")
             .or_else(|_| std::env::var("API_HOST"))
             .unwrap_or_else(|_| "0.0.0.0".into());
@@ -46,6 +49,7 @@ impl Config {
         Self {
             database_path: PathBuf::from(database_path),
             edge_shard_path: PathBuf::from(edge_shard_path),
+            text_index_path: PathBuf::from(text_index_path),
             bind_addr: format!("{bind_host}:{bind_port}"),
             voyage_api_key,
             embedding_model,

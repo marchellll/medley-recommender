@@ -5,6 +5,8 @@ use axum::Router;
 use medley_core::config::Config;
 use medley_core::embed::voyage::VoyageClient;
 use medley_core::index::qdrant_edge::EdgeVectorIndex;
+use medley_core::index::tantivy_text::TantivyTextIndex;
+use medley_core::index::{TextIndex, VectorIndex};
 use medley_core::repo::sqlite::SqliteSongRepository;
 use medley_core::service::search_service::SearchService;
 use medley_core::service::song_service::SongService;
@@ -17,7 +19,8 @@ use crate::state::AppState;
 struct CoreServices {
     repo: Arc<dyn medley_core::repo::SongRepository>,
     embedder: Arc<dyn medley_core::embed::EmbeddingProvider>,
-    index: Arc<dyn medley_core::index::VectorIndex>,
+    vector_index: Arc<dyn VectorIndex>,
+    text_index: Arc<dyn TextIndex>,
 }
 
 async fn build_core_services(config: &Config) -> anyhow::Result<CoreServices> {
@@ -34,25 +37,36 @@ async fn build_core_services(config: &Config) -> anyhow::Result<CoreServices> {
         config.voyage_base_url.clone(),
     ));
 
-    let index: Arc<dyn medley_core::index::VectorIndex> = Arc::new(
+    let vector_index: Arc<dyn VectorIndex> = Arc::new(
         EdgeVectorIndex::open(&config.edge_shard_path, config.embedding_dimension)
             .context("edge index open")?,
+    );
+
+    let text_index: Arc<dyn TextIndex> = Arc::new(
+        TantivyTextIndex::open(&config.text_index_path).context("text index open")?,
     );
 
     Ok(CoreServices {
         repo,
         embedder,
-        index,
+        vector_index,
+        text_index,
     })
 }
 
 pub async fn build_song_service(config: &Config) -> anyhow::Result<Arc<SongService>> {
     let services = build_core_services(config).await?;
-    Ok(Arc::new(SongService::new(
+    let songs = Arc::new(SongService::new(
         services.repo,
         services.embedder,
-        services.index,
-    )))
+        services.vector_index,
+        services.text_index,
+    ));
+    songs
+        .ensure_text_index_synced()
+        .await
+        .context("text index sync")?;
+    Ok(songs)
 }
 
 pub async fn build_state(config: &Config) -> anyhow::Result<AppState> {
@@ -67,12 +81,17 @@ pub async fn build_state(config: &Config) -> anyhow::Result<AppState> {
     let songs = Arc::new(SongService::new(
         services.repo.clone(),
         services.embedder.clone(),
-        services.index.clone(),
+        services.vector_index.clone(),
+        services.text_index.clone(),
     ));
+    songs
+        .ensure_text_index_synced()
+        .await
+        .context("text index sync")?;
     let search = Arc::new(SearchService::new(
         services.repo,
         services.embedder,
-        services.index,
+        services.vector_index,
     ));
 
     Ok(AppState::new(
@@ -100,9 +119,14 @@ pub fn test_config(
     edge_shard_path: std::path::PathBuf,
     voyage_base_url: impl Into<String>,
 ) -> Config {
+    let text_index_path = database_path
+        .parent()
+        .map(|dir| dir.join("text_index"))
+        .unwrap_or_else(|| std::path::PathBuf::from("data/text_index"));
     Config {
         database_path,
         edge_shard_path,
+        text_index_path,
         bind_addr: "127.0.0.1:0".into(),
         voyage_api_key: "test-key".into(),
         embedding_model: "voyage-4-large".into(),
