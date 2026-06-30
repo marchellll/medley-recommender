@@ -31,7 +31,5 @@ askama = "0.12"
 dotenvy = "0.15"
 jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 subtle = "2"
-tantivy = "0.22"
+tantivy = "0.26"
 tower = "0.5"
-
-

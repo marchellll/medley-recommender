@@ -165,7 +165,7 @@ fn run_search(
     let top_docs = searcher
         .search(
             &search_query,
-            &TopDocs::with_limit(MAX_SEARCH_HITS).and_offset(0),
+            &TopDocs::with_limit(MAX_SEARCH_HITS).and_offset(0).order_by_score(),
         )
         .map_err(map_tantivy_err)?;
 
