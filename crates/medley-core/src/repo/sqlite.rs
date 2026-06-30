@@ -1,9 +1,10 @@
 use std::path::Path;
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
 
 use crate::domain::error::AppError;
+use crate::domain::id::parse_datetime;
 use crate::domain::youtube::normalize_youtube_url;
 use crate::domain::models::{Song, SongListQuery, SongPatch};
 use crate::domain::pagination::{clamp_limit, CursorPage};
@@ -40,6 +41,8 @@ impl SqliteSongRepository {
     }
 
     fn map_row(row: &sqlx::sqlite::SqliteRow) -> Result<Song, AppError> {
+        let created_at: String = row.try_get("created_at")?;
+        let updated_at: String = row.try_get("updated_at")?;
         Ok(Song {
             song_id: row.try_get("song_id")?,
             title: row.try_get("title")?,
@@ -47,23 +50,10 @@ impl SqliteSongRepository {
             lyrics: row.try_get("lyrics")?,
             bpm: row.try_get("bpm")?,
             key: row.try_get("key")?,
-            created_at: parse_dt(row.try_get::<String, _>("created_at")?)?,
-            updated_at: parse_dt(row.try_get::<String, _>("updated_at")?)?,
+            created_at: parse_datetime(&created_at)?,
+            updated_at: parse_datetime(&updated_at)?,
         })
     }
-}
-
-fn parse_dt(s: String) -> Result<DateTime<Utc>, AppError> {
-    use chrono::NaiveDateTime;
-
-    DateTime::parse_from_rfc3339(&s)
-        .map(|d| d.with_timezone(&Utc))
-        .or_else(|_| {
-            NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S%.f")
-                .or_else(|_| NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S"))
-                .map(|n| n.and_utc())
-        })
-        .map_err(|e| AppError::Internal(format!("bad datetime: {e}")))
 }
 
 /// Rewrite `youtube/{video_id}` primary keys to UUID v7.

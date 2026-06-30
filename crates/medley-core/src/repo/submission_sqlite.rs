@@ -1,7 +1,7 @@
-use chrono::{DateTime, Utc};
 use sqlx::{Pool, Row, Sqlite};
 
 use crate::domain::error::AppError;
+use crate::domain::id::parse_datetime;
 use crate::domain::models::{NewSong, SongSubmission, SubmissionListQuery};
 use crate::domain::pagination::{clamp_limit, CursorPage};
 
@@ -15,6 +15,7 @@ impl SubmissionRepository {
     }
 
     fn map_row(row: &sqlx::sqlite::SqliteRow) -> Result<SongSubmission, AppError> {
+        let submitted_at: String = row.try_get("submitted_at")?;
         Ok(SongSubmission {
             submission_id: row.try_get("submission_id")?,
             title: row.try_get("title")?,
@@ -22,7 +23,7 @@ impl SubmissionRepository {
             lyrics: row.try_get("lyrics")?,
             bpm: row.try_get("bpm")?,
             key: row.try_get("key")?,
-            submitted_at: parse_dt(row.try_get::<String, _>("submitted_at")?)?,
+            submitted_at: parse_datetime(&submitted_at)?,
         })
     }
 
@@ -161,17 +162,4 @@ impl SubmissionRepository {
             None::<fn(&SongSubmission) -> f64>,
         ))
     }
-}
-
-fn parse_dt(s: String) -> Result<DateTime<Utc>, AppError> {
-    use chrono::NaiveDateTime;
-
-    DateTime::parse_from_rfc3339(&s)
-        .map(|d| d.with_timezone(&Utc))
-        .or_else(|_| {
-            NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S%.f")
-                .or_else(|_| NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S"))
-                .map(|n| n.and_utc())
-        })
-        .map_err(|e| AppError::Internal(format!("bad datetime: {e}")))
 }

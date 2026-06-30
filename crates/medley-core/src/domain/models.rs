@@ -17,27 +17,6 @@ pub struct Song {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SongSummary {
-    pub song_id: String,
-    pub title: String,
-    pub youtube_url: String,
-    pub bpm: f64,
-    pub key: String,
-}
-
-impl From<Song> for SongSummary {
-    fn from(s: Song) -> Self {
-        Self {
-            song_id: s.song_id,
-            title: s.title,
-            youtube_url: s.youtube_url,
-            bpm: s.bpm,
-            key: s.key,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct NewSong {
     pub title: String,
