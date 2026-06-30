@@ -18,7 +18,12 @@ cargo run -p medley-server
 Open `http://localhost:9876` · MCP at `http://localhost:9876/mcp`
 
 ```bash
-docker compose up --build   # containerized alternative
+docker pull ghcr.io/marchellll/medley-recommender:latest
+docker run -e VOYAGE_API_KEY -p 9876:9876 ghcr.io/marchellll/medley-recommender:latest
+```
+or
+```bash
+docker compose up --build   # build from source, containerized
 ```
 
 Voyage key required at runtime for query embedding. Pre-committed `data/edge_shard/` skips the batch re-index step.
