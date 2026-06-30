@@ -33,7 +33,7 @@ uuid.workspace = true
 jsonwebtoken.workspace = true
 subtle.workspace = true
 tokio-util = { version = "0.7", features = ["rt"] }
-schemars = "0.8"
+schemars = "1"
 
 [dev-dependencies]
 tempfile = "3"
