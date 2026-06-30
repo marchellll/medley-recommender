@@ -5,8 +5,14 @@ Worship song recommender. **Voyage AI** lyric embeddings (2048-dim), **Tantivy**
 ## Quick start
 
 ```bash
-cp .env.example .env          # set VOYAGE_API_KEY
-cargo run -p medley-server     # API + UI + MCP on :9876
+# set VOYAGE_API_KEY
+cp .env.example .env
+# or at least this
+export VOYAGE_API_KEY=<insert your own>
+
+
+# run the server
+cargo run -p medley-server
 ```
 
 Open `http://localhost:9876` · MCP at `http://localhost:9876/mcp`
