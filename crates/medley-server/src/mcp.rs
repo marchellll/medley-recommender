@@ -34,6 +34,7 @@ impl std::fmt::Debug for MedleyMcp {
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct SearchSongsArgs {
     pub query: String,
+    pub keys: Option<Vec<String>>,
     pub bpm_min: Option<f64>,
     pub bpm_max: Option<f64>,
     pub limit: Option<u32>,
@@ -66,6 +67,9 @@ pub struct UpdateSongArgs {
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct ListSongsArgs {
     pub q: Option<String>,
+    pub key: Option<String>,
+    pub bpm_min: Option<f64>,
+    pub bpm_max: Option<f64>,
     pub limit: Option<u32>,
     pub last_id: Option<String>,
     pub last_rank: Option<f64>,
@@ -83,7 +87,7 @@ impl MedleyMcp {
             query: args.query,
             bpm_min: args.bpm_min,
             bpm_max: args.bpm_max,
-            keys: None,
+            keys: args.keys,
             limit: args.limit,
         };
         let results = self.state.search.search(query).await.map_err(|e| e.to_string())?;
@@ -180,9 +184,9 @@ impl MedleyMcp {
         tracing::info!(?args, "mcp list_songs");
         let query = medley_core::domain::models::SongListQuery {
             q: args.q,
-            key: None,
-            bpm_min: None,
-            bpm_max: None,
+            key: args.key,
+            bpm_min: args.bpm_min,
+            bpm_max: args.bpm_max,
             limit: args.limit,
             last_id: args.last_id,
             last_rank: args.last_rank,
@@ -357,6 +361,9 @@ mod tests {
         let page = mcp
             .list_songs(Parameters(ListSongsArgs {
                 q: None,
+                key: None,
+                bpm_min: None,
+                bpm_max: None,
                 limit: None,
                 last_id: None,
                 last_rank: None,
@@ -391,6 +398,7 @@ mod tests {
         let out = mcp
             .search_songs(Parameters(SearchSongsArgs {
                 query: "find me".into(),
+                keys: None,
                 bpm_min: None,
                 bpm_max: None,
                 limit: Some(5),

@@ -29,11 +29,31 @@ The Rust migrations are **additive only**:
 
 ## Adding songs
 
+### Authentication
+
+Mutation endpoints (`POST`, `PATCH`, `DELETE`) require admin authentication via JWT.
+
+1. Login with your `ADMIN_TOKEN` to get a short-lived JWT:
+   ```bash
+   curl -X POST http://localhost:9876/api/auth/login \
+     -H 'Content-Type: application/json' \
+     -d '{"token": "<admin-token>"}'
+   ```
+   Response: `{"token": "<jwt>"}`
+
+2. Include the JWT as a `Bearer` token on subsequent mutation requests:
+   ```
+   Authorization: Bearer <jwt>
+   ```
+
+If `ADMIN_TOKEN` is not set, admin endpoints return `503 Service Unavailable`.
+
 ### REST API
 
 ```bash
 curl -X POST http://localhost:9876/api/songs \
   -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <jwt>' \
   -d '{
     "title": "Song Title",
     "youtube_url": "https://www.youtube.com/watch?v=...",
