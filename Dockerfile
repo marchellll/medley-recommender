@@ -17,8 +17,11 @@ WORKDIR /app
 
 COPY --from=builder /app/target/release/medley /usr/local/bin/medley
 
+COPY data ./data
+
 ENV DATABASE_PATH=data/medley.db \
     EDGE_SHARD_PATH=data/edge_shard \
+    TEXT_INDEX_PATH=data/text_index \
     BIND_HOST=0.0.0.0 \
     BIND_PORT=9876
 

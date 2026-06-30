@@ -19,7 +19,13 @@ Open `http://localhost:9876` · MCP at `http://localhost:9876/mcp`
 
 ```bash
 docker pull --platform linux/amd64 ghcr.io/marchellll/medley-recommender:latest
-docker run --platform linux/amd64 -e VOYAGE_API_KEY -p 9876:9876 ghcr.io/marchellll/medley-recommender:latest
+
+# data baked in; mount to override with your own
+docker run --platform linux/amd64 \
+  -v "$(pwd)/data:/app/data" \
+  -e VOYAGE_API_KEY \
+  -p 9876:9876 \
+  ghcr.io/marchellll/medley-recommender:latest
 ```
 or
 ```bash

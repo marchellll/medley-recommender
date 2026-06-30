@@ -13,8 +13,7 @@ target/
 # Environment (mounted as volume)
 .env
 
-# Local data (mounted as volume)
-data/
+# Logs (runtime, not needed in image)
 logs/
 
 # IDEs
