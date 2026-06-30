@@ -34,8 +34,8 @@ impl Config {
         let bind_port = std::env::var("BIND_PORT")
             .or_else(|_| std::env::var("API_PORT"))
             .unwrap_or_else(|_| "9876".into());
-        let voyage_api_key = std::env::var("VOYAGE_API_KEY")
-            .expect("VOYAGE_API_KEY must be set in env variablle");
+        let voyage_api_key =
+            std::env::var("VOYAGE_API_KEY").expect("VOYAGE_API_KEY must be set in env variablle");
         let embedding_model =
             std::env::var("EMBEDDING_MODEL").unwrap_or_else(|_| "voyage-4-large".into());
         let embedding_dimension = std::env::var("EMBEDDING_OUTPUT_DIMENSION")
