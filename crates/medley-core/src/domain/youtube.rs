@@ -52,10 +52,9 @@ mod tests {
 
     #[test]
     fn normalize_strips_query_params() {
-        let url = normalize_youtube_url(
-            "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLabc&t=42",
-        )
-        .unwrap();
+        let url =
+            normalize_youtube_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLabc&t=42")
+                .unwrap();
         assert_eq!(url, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
     }
 

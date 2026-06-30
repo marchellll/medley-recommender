@@ -132,14 +132,16 @@ impl McpAuth {
     }
 
     pub fn is_authenticated_headers(&self, headers: &axum::http::HeaderMap) -> bool {
-        bearer_from_headers(headers)
-            .is_some_and(|token| self.verify_bearer(&token))
+        bearer_from_headers(headers).is_some_and(|token| self.verify_bearer(&token))
     }
 }
 
 fn bearer_from_headers(headers: &axum::http::HeaderMap) -> Option<String> {
     let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
-    value.strip_prefix("Bearer ").map(str::trim).map(str::to_string)
+    value
+        .strip_prefix("Bearer ")
+        .map(str::trim)
+        .map(str::to_string)
 }
 
 fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
@@ -147,7 +149,10 @@ fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
 }
 
 pub fn admin_cookie_value(jwt: &str) -> String {
-    format!("{ADMIN_COOKIE}={jwt}; HttpOnly; Path=/; SameSite=Lax; Max-Age={}", JWT_TTL.as_secs())
+    format!(
+        "{ADMIN_COOKIE}={jwt}; HttpOnly; Path=/; SameSite=Lax; Max-Age={}",
+        JWT_TTL.as_secs()
+    )
 }
 
 pub fn clear_admin_cookie() -> String {
@@ -212,14 +217,11 @@ impl FromRequestParts<AppState> for AdminUser {
         let admin_auth = &state.admin_auth;
 
         if !admin_auth.enabled() {
-            return Err(AuthRejection::service_unavailable(
-                "ADMIN_TOKEN is not set",
-            ));
+            return Err(AuthRejection::service_unavailable("ADMIN_TOKEN is not set"));
         }
 
-        let token = AdminAuth::token_from_parts(parts).ok_or_else(|| {
-            AuthRejection::unauthorized("admin authentication required")
-        })?;
+        let token = AdminAuth::token_from_parts(parts)
+            .ok_or_else(|| AuthRejection::unauthorized("admin authentication required"))?;
 
         admin_auth
             .verify_jwt(&token)
@@ -236,8 +238,15 @@ pub fn optional_admin_from_parts(parts: &Parts, admin_auth: &AdminAuth) -> bool 
         .is_some()
 }
 
-pub fn optional_admin_from_request<B>(req: &axum::http::Request<B>, admin_auth: &AdminAuth) -> bool {
-    if let Some(cookie_header) = req.headers().get(header::COOKIE).and_then(|v| v.to_str().ok()) {
+pub fn optional_admin_from_request<B>(
+    req: &axum::http::Request<B>,
+    admin_auth: &AdminAuth,
+) -> bool {
+    if let Some(cookie_header) = req
+        .headers()
+        .get(header::COOKIE)
+        .and_then(|v| v.to_str().ok())
+    {
         for cookie in cookie_header.split(';') {
             let cookie = cookie.trim();
             if let Some(value) = cookie.strip_prefix(&format!("{ADMIN_COOKIE}=")) {

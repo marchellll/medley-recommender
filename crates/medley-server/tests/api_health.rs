@@ -5,10 +5,8 @@ use tower::ServiceExt;
 
 #[tokio::test]
 async fn health_returns_ok() {
-    let app = axum::Router::new().route(
-        "/health",
-        axum::routing::get(medley_server::routes::health),
-    );
+    let app =
+        axum::Router::new().route("/health", axum::routing::get(medley_server::routes::health));
 
     let response = app
         .oneshot(

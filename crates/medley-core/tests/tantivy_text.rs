@@ -6,8 +6,8 @@ use medley_core::domain::models::{Song, SongListQuery};
 use medley_core::embed::MockEmbeddingProvider;
 use medley_core::index::tantivy_text::TantivyTextIndex;
 use medley_core::index::MockVectorIndex;
-use medley_core::repo::SongRepository;
 use medley_core::repo::sqlite::SqliteSongRepository;
+use medley_core::repo::SongRepository;
 use medley_core::service::song_service::SongService;
 use tempfile::TempDir;
 
@@ -35,7 +35,9 @@ async fn setup_service() -> (TempDir, SongService, Arc<SqliteSongRepository>) {
     let repo_dyn: Arc<dyn SongRepository> = repo.clone();
 
     let mut vector_index = MockVectorIndex::new();
-    vector_index.expect_flush().returning(|| Box::pin(async { Ok(()) }));
+    vector_index
+        .expect_flush()
+        .returning(|| Box::pin(async { Ok(()) }));
     vector_index
         .expect_upsert()
         .returning(|_, _, _, _| Box::pin(async { Ok(()) }));
@@ -203,7 +205,12 @@ async fn text_search_pagination_is_stable() {
 #[tokio::test]
 async fn short_query_does_not_fuzzy_match_amin_for_iman() {
     let (_dir, service, repo) = setup_service().await;
-    let iman_song = sample_song("Faith Song", "hidup oleh iman bukan penglihatan", "G", 120.0);
+    let iman_song = sample_song(
+        "Faith Song",
+        "hidup oleh iman bukan penglihatan",
+        "G",
+        120.0,
+    );
     let amin_song = sample_song("Amen Song", "pagi siang malam amin amin", "G", 120.0);
     repo.insert(&iman_song).await.unwrap();
     repo.insert(&amin_song).await.unwrap();

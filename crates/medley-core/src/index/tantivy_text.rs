@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use tantivy::collector::TopDocs;
 use tantivy::query::{BooleanQuery, FuzzyTermQuery, Occur, Query};
 use tantivy::schema::{Field, Schema, Value, FAST, STORED, STRING, TEXT};
-use tantivy::{doc, Index, IndexReader, IndexWriter, ReloadPolicy, Term, TantivyDocument};
+use tantivy::{doc, Index, IndexReader, IndexWriter, ReloadPolicy, TantivyDocument, Term};
 use tokio::task;
 
 use super::TextSearchHit;
@@ -59,9 +59,7 @@ impl TantivyTextIndex {
             (index, fields)
         };
 
-        let writer = index
-            .writer(WRITER_HEAP_BYTES)
-            .map_err(map_tantivy_err)?;
+        let writer = index.writer(WRITER_HEAP_BYTES).map_err(map_tantivy_err)?;
         let reader = index
             .reader_builder()
             .reload_policy(ReloadPolicy::OnCommitWithDelay)
@@ -146,18 +144,18 @@ fn run_search(
     reader: &Arc<RwLock<IndexReader>>,
     query: &SongListQuery,
 ) -> Result<TextSearchPage, AppError> {
-        let q_text = query.q.as_ref().map(|s| s.trim()).unwrap_or("");
-        if q_text.is_empty() {
-            return Err(AppError::Validation("empty search query".into()));
-        }
+    let q_text = query.q.as_ref().map(|s| s.trim()).unwrap_or("");
+    if q_text.is_empty() {
+        return Err(AppError::Validation("empty search query".into()));
+    }
 
-        let limit = clamp_limit(query.limit, 20, 100);
+    let limit = clamp_limit(query.limit, 20, 100);
 
-        if query.last_id.is_some() && query.last_rank.is_none() {
-            return Err(AppError::InvalidCursor(
-                "last_rank required when q is set".into(),
-            ));
-        }
+    if query.last_id.is_some() && query.last_rank.is_none() {
+        return Err(AppError::InvalidCursor(
+            "last_rank required when q is set".into(),
+        ));
+    }
 
     let search_query = TantivyTextIndex::build_search_query(fields, q_text)?;
     let reader = reader
@@ -185,43 +183,43 @@ fn run_search(
         hits.push((song_id, score));
     }
 
-        hits.sort_by(|a, b| {
-            b.1.partial_cmp(&a.1)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| a.0.cmp(&b.0))
-        });
+    hits.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.0.cmp(&b.0))
+    });
 
-        let total = hits.len() as i64;
+    let total = hits.len() as i64;
 
-        if let (Some(last_id), Some(last_rank)) = (&query.last_id, query.last_rank) {
-            let last_rank = last_rank as f32;
-            let cursor_ok = hits.iter().any(|(id, score)| {
-                id == last_id && (*score - last_rank).abs() < f32::EPSILON
-            });
-            if !cursor_ok {
-                return Err(AppError::InvalidCursor(
-                    "last_id/last_rank not in current result set".into(),
-                ));
-            }
-            hits.retain(|(id, score)| {
-                *score < last_rank - f32::EPSILON
-                    || ((*score - last_rank).abs() < f32::EPSILON && id.as_str() > last_id.as_str())
-            });
+    if let (Some(last_id), Some(last_rank)) = (&query.last_id, query.last_rank) {
+        let last_rank = last_rank as f32;
+        let cursor_ok = hits
+            .iter()
+            .any(|(id, score)| id == last_id && (*score - last_rank).abs() < f32::EPSILON);
+        if !cursor_ok {
+            return Err(AppError::InvalidCursor(
+                "last_id/last_rank not in current result set".into(),
+            ));
         }
+        hits.retain(|(id, score)| {
+            *score < last_rank - f32::EPSILON
+                || ((*score - last_rank).abs() < f32::EPSILON && id.as_str() > last_id.as_str())
+        });
+    }
 
-        let has_more = hits.len() > limit as usize;
-        hits.truncate(limit as usize);
+    let has_more = hits.len() > limit as usize;
+    hits.truncate(limit as usize);
 
-        let next_last_id = if has_more {
-            hits.last().map(|(id, _)| id.clone())
-        } else {
-            None
-        };
-        let next_last_rank = if has_more {
-            hits.last().map(|(_, score)| *score as f64)
-        } else {
-            None
-        };
+    let next_last_id = if has_more {
+        hits.last().map(|(id, _)| id.clone())
+    } else {
+        None
+    };
+    let next_last_rank = if has_more {
+        hits.last().map(|(_, score)| *score as f64)
+    } else {
+        None
+    };
 
     Ok(TextSearchPage {
         hits: hits
@@ -278,7 +276,9 @@ impl super::TextIndex for TantivyTextIndex {
 
         task::spawn_blocking(move || {
             let term = Term::from_field_text(fields.song_id, &song.song_id);
-            let mut writer = writer.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+            let mut writer = writer
+                .lock()
+                .map_err(|e| AppError::Internal(e.to_string()))?;
             writer.delete_term(term);
             let document = doc!(
                 fields.song_id => song.song_id.clone(),
@@ -289,7 +289,9 @@ impl super::TextIndex for TantivyTextIndex {
             );
             writer.add_document(document).map_err(map_tantivy_err)?;
             writer.commit().map_err(map_tantivy_err)?;
-            let reader = reader.read().map_err(|e| AppError::Internal(e.to_string()))?;
+            let reader = reader
+                .read()
+                .map_err(|e| AppError::Internal(e.to_string()))?;
             reader.reload().map_err(map_tantivy_err)
         })
         .await
@@ -304,10 +306,14 @@ impl super::TextIndex for TantivyTextIndex {
 
         task::spawn_blocking(move || {
             let term = Term::from_field_text(fields.song_id, &song_id);
-            let mut writer = writer.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+            let mut writer = writer
+                .lock()
+                .map_err(|e| AppError::Internal(e.to_string()))?;
             writer.delete_term(term);
             writer.commit().map_err(map_tantivy_err)?;
-            let reader = reader.read().map_err(|e| AppError::Internal(e.to_string()))?;
+            let reader = reader
+                .read()
+                .map_err(|e| AppError::Internal(e.to_string()))?;
             reader.reload().map_err(map_tantivy_err)
         })
         .await
@@ -330,7 +336,9 @@ impl super::TextIndex for TantivyTextIndex {
         let songs = songs.to_vec();
 
         task::spawn_blocking(move || {
-            let mut writer = writer.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+            let mut writer = writer
+                .lock()
+                .map_err(|e| AppError::Internal(e.to_string()))?;
             writer.delete_all_documents().map_err(map_tantivy_err)?;
             for song in songs {
                 let document = doc!(
@@ -343,7 +351,9 @@ impl super::TextIndex for TantivyTextIndex {
                 writer.add_document(document).map_err(map_tantivy_err)?;
             }
             writer.commit().map_err(map_tantivy_err)?;
-            let reader = reader.read().map_err(|e| AppError::Internal(e.to_string()))?;
+            let reader = reader
+                .read()
+                .map_err(|e| AppError::Internal(e.to_string()))?;
             reader.reload().map_err(map_tantivy_err)
         })
         .await
@@ -353,7 +363,9 @@ impl super::TextIndex for TantivyTextIndex {
     async fn doc_count(&self) -> Result<u64, AppError> {
         let reader = self.reader.clone();
         task::spawn_blocking(move || {
-            let reader = reader.read().map_err(|e| AppError::Internal(e.to_string()))?;
+            let reader = reader
+                .read()
+                .map_err(|e| AppError::Internal(e.to_string()))?;
             Ok(reader.searcher().num_docs())
         })
         .await

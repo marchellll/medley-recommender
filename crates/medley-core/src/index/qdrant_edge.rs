@@ -53,13 +53,11 @@ impl EdgeVectorIndex {
     }
 
     fn song_payload(song_id: &str, key: &str, bpm: f64) -> Payload {
-        Payload(
-            serde_json::Map::from_iter([
-                ("song_id".into(), serde_json::json!(song_id)),
-                ("key".into(), serde_json::json!(key)),
-                ("bpm".into(), serde_json::json!(bpm)),
-            ]),
-        )
+        Payload(serde_json::Map::from_iter([
+            ("song_id".into(), serde_json::json!(song_id)),
+            ("key".into(), serde_json::json!(key)),
+            ("bpm".into(), serde_json::json!(bpm)),
+        ]))
     }
 
     fn build_filter(
@@ -130,11 +128,13 @@ impl VectorIndex for EdgeVectorIndex {
 
         let shard = self.shard.clone();
         task::spawn_blocking(move || {
-            let shard = shard.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+            let shard = shard
+                .lock()
+                .map_err(|e| AppError::Internal(e.to_string()))?;
             shard
-                .update(UpdateOperation::PointOperation(PointOperations::UpsertPoints(
-                    PointInsertOperations::PointsList(vec![point]),
-                )))
+                .update(UpdateOperation::PointOperation(
+                    PointOperations::UpsertPoints(PointInsertOperations::PointsList(vec![point])),
+                ))
                 .map_err(map_edge_err)
         })
         .await
@@ -145,11 +145,13 @@ impl VectorIndex for EdgeVectorIndex {
         let id = Self::song_point_id(song_id)?;
         let shard = self.shard.clone();
         task::spawn_blocking(move || {
-            let shard = shard.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+            let shard = shard
+                .lock()
+                .map_err(|e| AppError::Internal(e.to_string()))?;
             shard
-                .update(UpdateOperation::PointOperation(PointOperations::DeletePoints {
-                    ids: vec![id],
-                }))
+                .update(UpdateOperation::PointOperation(
+                    PointOperations::DeletePoints { ids: vec![id] },
+                ))
                 .map_err(map_edge_err)
         })
         .await
@@ -169,7 +171,9 @@ impl VectorIndex for EdgeVectorIndex {
         let shard = self.shard.clone();
 
         task::spawn_blocking(move || {
-            let shard = shard.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+            let shard = shard
+                .lock()
+                .map_err(|e| AppError::Internal(e.to_string()))?;
             let request = SearchRequest {
                 query: QueryEnum::Nearest(NamedQuery::default_dense(query_vector)),
                 filter,
@@ -184,10 +188,7 @@ impl VectorIndex for EdgeVectorIndex {
             Ok(points
                 .into_iter()
                 .filter_map(|point| {
-                    let song_id = point
-                        .payload
-                        .as_ref()
-                        .and_then(Self::payload_song_id)?;
+                    let song_id = point.payload.as_ref().and_then(Self::payload_song_id)?;
                     Some(VectorHit {
                         song_id,
                         score: point.score,
@@ -202,7 +203,9 @@ impl VectorIndex for EdgeVectorIndex {
     async fn flush(&self) -> Result<(), AppError> {
         let shard = self.shard.clone();
         task::spawn_blocking(move || {
-            let shard = shard.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+            let shard = shard
+                .lock()
+                .map_err(|e| AppError::Internal(e.to_string()))?;
             shard.optimize().map_err(map_edge_err)?;
             Ok(())
         })

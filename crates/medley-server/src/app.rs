@@ -46,9 +46,8 @@ async fn build_core_services(config: &Config) -> anyhow::Result<CoreServices> {
             .context("edge index open")?,
     );
 
-    let text_index: Arc<dyn TextIndex> = Arc::new(
-        TantivyTextIndex::open(&config.text_index_path).context("text index open")?,
-    );
+    let text_index: Arc<dyn TextIndex> =
+        Arc::new(TantivyTextIndex::open(&config.text_index_path).context("text index open")?);
 
     Ok(CoreServices {
         repo,

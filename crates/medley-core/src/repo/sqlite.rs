@@ -5,9 +5,9 @@ use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
 
 use crate::domain::error::AppError;
 use crate::domain::id::parse_datetime;
-use crate::domain::youtube::normalize_youtube_url;
 use crate::domain::models::{Song, SongListQuery, SongPatch};
 use crate::domain::pagination::{clamp_limit, CursorPage};
+use crate::domain::youtube::normalize_youtube_url;
 
 pub struct SqliteSongRepository {
     pool: Pool<Sqlite>,
@@ -187,7 +187,11 @@ impl super::SongRepository for SqliteSongRepository {
             q = q.bind(id);
         }
         let rows = q.fetch_all(&self.pool).await?;
-        tracing::debug!(requested = song_ids.len(), found = rows.len(), "repo.get_many done");
+        tracing::debug!(
+            requested = song_ids.len(),
+            found = rows.len(),
+            "repo.get_many done"
+        );
         rows.iter().map(Self::map_row).collect()
     }
 
@@ -297,7 +301,9 @@ impl super::SongRepository for SqliteSongRepository {
 
         if let Some(last_id) = &query.last_id {
             if !super::SongRepository::exists(self, last_id).await? {
-                return Err(AppError::InvalidCursor(format!("unknown last_id: {last_id}")));
+                return Err(AppError::InvalidCursor(format!(
+                    "unknown last_id: {last_id}"
+                )));
             }
         }
 

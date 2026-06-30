@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
-use axum::extract::ConnectInfo;
 use axum::body::Body;
+use axum::extract::ConnectInfo;
 use http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use medley_server::app::{admin_bearer, build_state, test_config, test_router};
@@ -23,10 +23,7 @@ fn test_app(state: medley_server::state::AppState) -> axum::Router {
     test_router(state)
 }
 
-async fn oneshot(
-    app: axum::Router,
-    request: Request<Body>,
-) -> http::Response<axum::body::Body> {
+async fn oneshot(app: axum::Router, request: Request<Body>) -> http::Response<axum::body::Body> {
     app.oneshot(request).await.unwrap()
 }
 
@@ -236,10 +233,7 @@ async fn mcp_middleware_blocks_mutation_without_api_token() {
     let state = build_state(&config).await.unwrap();
 
     let app = Router::new()
-        .route(
-            "/mcp",
-            axum::routing::post(|| async { "ok" }),
-        )
+        .route("/mcp", axum::routing::post(|| async { "ok" }))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             mcp_auth_middleware,
@@ -282,10 +276,7 @@ async fn mcp_middleware_allows_mutation_with_api_token() {
     let state = build_state(&config).await.unwrap();
 
     let app = Router::new()
-        .route(
-            "/mcp",
-            axum::routing::post(|| async { "ok" }),
-        )
+        .route("/mcp", axum::routing::post(|| async { "ok" }))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             mcp_auth_middleware,

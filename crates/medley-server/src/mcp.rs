@@ -1,8 +1,7 @@
 use rmcp::{
-    ServerHandler,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{ServerCapabilities, ServerInfo},
-    schemars, tool, tool_handler, tool_router,
+    schemars, tool, tool_handler, tool_router, ServerHandler,
 };
 use serde_json::json;
 
@@ -90,7 +89,12 @@ impl MedleyMcp {
             keys: args.keys,
             limit: args.limit,
         };
-        let results = self.state.search.search(query).await.map_err(|e| e.to_string())?;
+        let results = self
+            .state
+            .search
+            .search(query)
+            .await
+            .map_err(|e| e.to_string())?;
         tracing::info!(count = results.len(), "mcp search_songs ok");
         serde_json::to_string(&json!({
             "results": results,
@@ -100,10 +104,7 @@ impl MedleyMcp {
     }
 
     #[tool(description = "Add a new song to the catalog")]
-    async fn add_song(
-        &self,
-        Parameters(args): Parameters<AddSongArgs>,
-    ) -> Result<String, String> {
+    async fn add_song(&self, Parameters(args): Parameters<AddSongArgs>) -> Result<String, String> {
         require_mcp_authenticated()?;
         tracing::info!(title = %args.title, "mcp add_song");
         let new_song = medley_core::domain::models::NewSong {
@@ -113,7 +114,12 @@ impl MedleyMcp {
             bpm: args.bpm,
             key: args.key,
         };
-        let song = self.state.songs.create(new_song).await.map_err(|e| e.to_string())?;
+        let song = self
+            .state
+            .songs
+            .create(new_song)
+            .await
+            .map_err(|e| e.to_string())?;
         tracing::info!(song_id = %song.song_id, "mcp add_song ok");
         serde_json::to_string(&json!({
             "success": true,
@@ -124,10 +130,7 @@ impl MedleyMcp {
     }
 
     #[tool(description = "Get a song by ID")]
-    async fn get_song(
-        &self,
-        Parameters(args): Parameters<SongIdArgs>,
-    ) -> Result<String, String> {
+    async fn get_song(&self, Parameters(args): Parameters<SongIdArgs>) -> Result<String, String> {
         tracing::info!(song_id = %args.song_id, "mcp get_song");
         let song = self
             .state
@@ -191,7 +194,12 @@ impl MedleyMcp {
             last_id: args.last_id,
             last_rank: args.last_rank,
         };
-        let page = self.state.songs.list(query).await.map_err(|e| e.to_string())?;
+        let page = self
+            .state
+            .songs
+            .list(query)
+            .await
+            .map_err(|e| e.to_string())?;
         serde_json::to_string(&page).map_err(|e| e.to_string())
     }
 }
@@ -207,8 +215,8 @@ impl ServerHandler for MedleyMcp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::with_mcp_authenticated;
     use crate::app::{build_state, test_config};
+    use crate::auth::with_mcp_authenticated;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -286,7 +294,9 @@ mod tests {
         let song_id = created_json["song_id"].as_str().unwrap().to_string();
 
         let fetched = mcp
-            .get_song(Parameters(SongIdArgs { song_id: song_id.clone() }))
+            .get_song(Parameters(SongIdArgs {
+                song_id: song_id.clone(),
+            }))
             .await
             .unwrap();
         let song: medley_core::domain::models::Song = serde_json::from_str(&fetched).unwrap();

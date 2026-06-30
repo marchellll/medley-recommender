@@ -11,8 +11,7 @@ use medley_server::rate_limit::mcp_auth_middleware;
 use medley_server::reindex;
 use medley_server::routes;
 use rmcp::transport::streamable_http_server::{
-    StreamableHttpServerConfig, StreamableHttpService,
-    session::local::LocalSessionManager,
+    session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
 };
 use tokio_util::sync::CancellationToken;
 use tower_http::cors::CorsLayer;
@@ -105,11 +104,11 @@ async fn serve() -> anyhow::Result<()> {
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
-        .with_graceful_shutdown(async move {
-            tokio::signal::ctrl_c().await.ok();
-            ct.cancel();
-        })
-        .await?;
+    .with_graceful_shutdown(async move {
+        tokio::signal::ctrl_c().await.ok();
+        ct.cancel();
+    })
+    .await?;
 
     Ok(())
 }

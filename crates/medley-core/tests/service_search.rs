@@ -50,7 +50,9 @@ async fn search_embeds_queries_and_joins_catalog_rows() {
     embedder
         .expect_embed()
         .times(1)
-        .withf(|texts, input_type| texts == ["grace".to_string()] && *input_type == InputType::Query)
+        .withf(|texts, input_type| {
+            texts == ["grace".to_string()] && *input_type == InputType::Query
+        })
         .returning(|_, _| Box::pin(async { Ok(vec![vec![1.0, 0.0, 0.0, 0.0]]) }));
 
     let mut index = MockVectorIndex::new();

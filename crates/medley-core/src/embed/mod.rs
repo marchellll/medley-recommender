@@ -14,5 +14,9 @@ pub enum InputType {
 #[mockall::automock]
 pub trait EmbeddingProvider: Send + Sync {
     fn dimension(&self) -> usize;
-    async fn embed(&self, texts: &[String], input_type: InputType) -> Result<Vec<Vec<f32>>, AppError>;
+    async fn embed(
+        &self,
+        texts: &[String],
+        input_type: InputType,
+    ) -> Result<Vec<Vec<f32>>, AppError>;
 }

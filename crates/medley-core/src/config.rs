@@ -22,12 +22,12 @@ impl Config {
 
     pub fn from_env() -> Self {
         Self::load_env();
-        let database_path = std::env::var("DATABASE_PATH")
-            .unwrap_or_else(|_| "data/medley.db".into());
-        let edge_shard_path = std::env::var("EDGE_SHARD_PATH")
-            .unwrap_or_else(|_| "data/edge_shard".into());
-        let text_index_path = std::env::var("TEXT_INDEX_PATH")
-            .unwrap_or_else(|_| "data/text_index".into());
+        let database_path =
+            std::env::var("DATABASE_PATH").unwrap_or_else(|_| "data/medley.db".into());
+        let edge_shard_path =
+            std::env::var("EDGE_SHARD_PATH").unwrap_or_else(|_| "data/edge_shard".into());
+        let text_index_path =
+            std::env::var("TEXT_INDEX_PATH").unwrap_or_else(|_| "data/text_index".into());
         let bind_host = std::env::var("BIND_HOST")
             .or_else(|_| std::env::var("API_HOST"))
             .unwrap_or_else(|_| "0.0.0.0".into());
@@ -35,14 +35,14 @@ impl Config {
             .or_else(|_| std::env::var("API_PORT"))
             .unwrap_or_else(|_| "9876".into());
         let voyage_api_key = std::env::var("VOYAGE_API_KEY").unwrap_or_default();
-        let embedding_model = std::env::var("EMBEDDING_MODEL")
-            .unwrap_or_else(|_| "voyage-4-large".into());
+        let embedding_model =
+            std::env::var("EMBEDDING_MODEL").unwrap_or_else(|_| "voyage-4-large".into());
         let embedding_dimension = std::env::var("EMBEDDING_OUTPUT_DIMENSION")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(2048);
-        let voyage_base_url = std::env::var("VOYAGE_BASE_URL")
-            .unwrap_or_else(|_| "https://api.voyageai.com".into());
+        let voyage_base_url =
+            std::env::var("VOYAGE_BASE_URL").unwrap_or_else(|_| "https://api.voyageai.com".into());
         let admin_token = std::env::var("ADMIN_TOKEN").unwrap_or_default();
         let api_token = std::env::var("API_TOKEN").unwrap_or_default();
 

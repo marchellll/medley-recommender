@@ -82,10 +82,7 @@ impl SongService {
             .into_iter()
             .map(|song| (song.song_id.clone(), song))
             .collect();
-        let items: Vec<Song> = song_ids
-            .iter()
-            .filter_map(|id| by_id.remove(id))
-            .collect();
+        let items: Vec<Song> = song_ids.iter().filter_map(|id| by_id.remove(id)).collect();
 
         Ok(CursorPage {
             items,
@@ -244,10 +241,7 @@ impl SongService {
 
             if !ready.is_empty() {
                 let lyrics: Vec<String> = ready.iter().map(|s| s.lyrics.clone()).collect();
-                let vectors = self
-                    .embedder
-                    .embed(&lyrics, InputType::Document)
-                    .await?;
+                let vectors = self.embedder.embed(&lyrics, InputType::Document).await?;
                 if vectors.len() != ready.len() {
                     return Err(AppError::Embedding(format!(
                         "expected {} embeddings, got {}",
@@ -271,12 +265,7 @@ impl SongService {
         }
 
         self.vector_index.flush().await?;
-        tracing::info!(
-            total_songs,
-            indexed,
-            skipped,
-            "song_service.reindex_all ok"
-        );
+        tracing::info!(total_songs, indexed, skipped, "song_service.reindex_all ok");
         Ok(ReindexReport {
             total_songs,
             indexed,

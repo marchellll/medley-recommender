@@ -5,6 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use axum::http::StatusCode;
 use axum::{
     body::Body,
     extract::{ConnectInfo, State},
@@ -13,9 +14,11 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use axum::http::StatusCode;
 
-use crate::auth::{is_mcp_mutation_tool, mcp_mutation_tool_name, optional_admin_from_request, with_mcp_authenticated};
+use crate::auth::{
+    is_mcp_mutation_tool, mcp_mutation_tool_name, optional_admin_from_request,
+    with_mcp_authenticated,
+};
 use crate::state::AppState;
 
 const DEFAULT_WINDOW: Duration = Duration::from_secs(60);
@@ -64,10 +67,7 @@ impl RateLimiter {
     }
 
     pub fn limit_message(&self) -> String {
-        format!(
-            "rate limit exceeded ({}/min per IP)",
-            self.max_requests
-        )
+        format!("rate limit exceeded ({}/min per IP)", self.max_requests)
     }
 }
 

@@ -87,23 +87,21 @@ async fn create_inserts_embeds_upserts_and_flushes() {
 async fn update_title_only_skips_vector_reindex() {
     let song = sample_song("019ade09-0000-7000-8000-000000000001");
     let mut repo = MockSongRepository::new();
-    repo.expect_update()
-        .times(1)
-        .returning({
+    repo.expect_update().times(1).returning({
+        let song = song.clone();
+        move |id, patch| {
+            assert_eq!(id, "019ade09-0000-7000-8000-000000000001");
+            assert_eq!(patch.title.as_deref(), Some("New Title"));
+            assert!(patch.lyrics.is_none());
             let song = song.clone();
-            move |id, patch| {
-                assert_eq!(id, "019ade09-0000-7000-8000-000000000001");
-                assert_eq!(patch.title.as_deref(), Some("New Title"));
-                assert!(patch.lyrics.is_none());
-                let song = song.clone();
-                Box::pin(async move {
-                    Ok(Song {
-                        title: "New Title".into(),
-                        ..song
-                    })
+            Box::pin(async move {
+                Ok(Song {
+                    title: "New Title".into(),
+                    ..song
                 })
-            }
-        });
+            })
+        }
+    });
 
     let mut embedder = MockEmbeddingProvider::new();
     embedder.expect_embed().times(0);
@@ -247,9 +245,7 @@ async fn create_strips_youtube_query_params() {
         .returning(|_| Box::pin(async { Ok(false) }));
     repo.expect_insert()
         .times(1)
-        .withf(|song: &Song| {
-            song.youtube_url == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-        })
+        .withf(|song: &Song| song.youtube_url == "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
         .returning(|_| Box::pin(async { Ok(()) }));
 
     let mut embedder = MockEmbeddingProvider::new();
@@ -284,7 +280,10 @@ async fn create_strips_youtube_query_params() {
     let mut input = sample_new_song();
     input.youtube_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLabc".into();
     let song = service.create(input).await.unwrap();
-    assert_eq!(song.youtube_url, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    assert_eq!(
+        song.youtube_url,
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    );
 }
 
 #[tokio::test]

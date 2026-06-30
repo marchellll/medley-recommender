@@ -121,4 +121,4 @@ medley-recommender/
 
 ## License
 
-[Add your license here]
+MIT — see [LICENSE](LICENSE)

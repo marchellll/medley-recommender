@@ -4,8 +4,8 @@ use medley_core::domain::error::AppError;
 use medley_core::domain::models::NewSong;
 use medley_core::embed::MockEmbeddingProvider;
 use medley_core::index::{MockTextIndex, MockVectorIndex};
-use medley_core::repo::submission_sqlite::SubmissionRepository;
 use medley_core::repo::sqlite::SqliteSongRepository;
+use medley_core::repo::submission_sqlite::SubmissionRepository;
 use medley_core::service::song_service::SongService;
 use medley_core::service::submission_service::SubmissionService;
 use tempfile::TempDir;
@@ -120,7 +120,10 @@ async fn approve_creates_catalog_entry_and_removes_submission() {
     let id = submission.submission_id.clone();
     let input = sample_new_song("app00000001");
 
-    let song = submissions.approve(&id, input, songs.as_ref()).await.unwrap();
+    let song = submissions
+        .approve(&id, input, songs.as_ref())
+        .await
+        .unwrap();
     assert_eq!(song.title, "Test Song");
     assert!(submissions.get(&id).await.is_err());
     assert!(songs.get(&song.song_id).await.is_ok());
@@ -137,6 +140,9 @@ async fn approve_uses_posted_values_not_stale_db() {
     let mut input = sample_new_song("edit0000001");
     input.title = "Approved Title".into();
 
-    let song = submissions.approve(&id, input, songs.as_ref()).await.unwrap();
+    let song = submissions
+        .approve(&id, input, songs.as_ref())
+        .await
+        .unwrap();
     assert_eq!(song.title, "Approved Title");
 }

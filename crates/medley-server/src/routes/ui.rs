@@ -1,14 +1,14 @@
 use askama::Template;
 use axum::{
-    Form, Router,
+    body::Body,
     extract::{Path, Query, State},
+    http::Request,
     http::{header, HeaderMap, StatusCode},
     middleware,
+    middleware::Next,
     response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
-    body::Body,
-    http::Request,
-    middleware::Next,
+    Form, Router,
 };
 use medley_core::domain::models::{NewSong, SearchQuery, SongListQuery, SubmissionListQuery};
 
@@ -479,7 +479,10 @@ struct LoginForm {
     token: String,
 }
 
-async fn login_post(State(state): State<AppState>, Form(form): Form<LoginForm>) -> impl IntoResponse {
+async fn login_post(
+    State(state): State<AppState>,
+    Form(form): Form<LoginForm>,
+) -> impl IntoResponse {
     if !state.admin_auth.enabled() {
         return Html(
             LoginTemplate {
@@ -599,7 +602,8 @@ fn contribute_template(
 ) -> SongFormTemplate {
     SongFormTemplate {
         heading: "Contribute a song".into(),
-        subtitle: "Suggest a song for the catalog. Submissions are reviewed before publishing.".into(),
+        subtitle: "Suggest a song for the catalog. Submissions are reviewed before publishing."
+            .into(),
         action: "/contribute".into(),
         submit_label: "Submit for review".into(),
         cancel_href: "/".into(),
@@ -607,7 +611,11 @@ fn contribute_template(
         youtube_url: form.youtube_url.clone(),
         lyrics: form.lyrics.clone(),
         bpm: form.bpm.clone(),
-        key: if form.key.is_empty() { "C".into() } else { form.key.clone() },
+        key: if form.key.is_empty() {
+            "C".into()
+        } else {
+            form.key.clone()
+        },
         error,
         success,
         is_admin,
@@ -639,7 +647,12 @@ fn validate_contribute_form(
     form: &SongForm,
     is_admin: bool,
 ) -> Result<NewSong, (SongFormTemplate, String)> {
-    parse_song_form(form).map_err(|e| (contribute_template(form, Some(e.clone()), None, is_admin), e))
+    parse_song_form(form).map_err(|e| {
+        (
+            contribute_template(form, Some(e.clone()), None, is_admin),
+            e,
+        )
+    })
 }
 
 async fn create_song_form(
@@ -717,11 +730,7 @@ fn edit_song_template(song_id: &str, form: &SongForm, error: Option<String>) -> 
     }
 }
 
-async fn update_song_form(
-    state: AppState,
-    song_id: String,
-    form: SongForm,
-) -> impl IntoResponse {
+async fn update_song_form(state: AppState, song_id: String, form: SongForm) -> impl IntoResponse {
     tracing::info!(%song_id, title = %form.title, "ui POST /songs/:id/edit");
     let bpm = match parse_required_f64(&form.bpm, "BPM") {
         Ok(v) => v,
@@ -781,9 +790,11 @@ async fn contribute_form(
     headers: HeaderMap,
     Query(query): Query<ContributeQuery>,
 ) -> Html<String> {
-    let success = query.submitted.as_deref().is_some_and(|v| v == "1").then(|| {
-        "Thanks! Your submission is in the review queue.".into()
-    });
+    let success = query
+        .submitted
+        .as_deref()
+        .is_some_and(|v| v == "1")
+        .then(|| "Thanks! Your submission is in the review queue.".into());
     Html(
         contribute_template(
             &SongForm::default(),
@@ -805,7 +816,9 @@ async fn contribute_post_handler(
     tracing::info!(title = %form.title, youtube_url = %form.youtube_url, "ui POST /contribute");
     let new_song = match validate_contribute_form(&form, admin) {
         Ok(v) => v,
-        Err((tpl, _)) => return Html(tpl.render().unwrap_or_else(|e| e.to_string())).into_response(),
+        Err((tpl, _)) => {
+            return Html(tpl.render().unwrap_or_else(|e| e.to_string())).into_response()
+        }
     };
 
     match state.submissions.submit(new_song).await {
@@ -916,9 +929,11 @@ async fn submission_detail_get(
     match state.submissions.get(&submission_id).await {
         Ok(submission) => {
             let (submitted_at, form) = submission_from_record(&submission);
-            let success = query.submitted.as_deref().is_some_and(|v| v == "saved").then(|| {
-                "Changes saved.".into()
-            });
+            let success = query
+                .submitted
+                .as_deref()
+                .is_some_and(|v| v == "saved")
+                .then(|| "Changes saved.".into());
             Html(
                 submission_detail_template(&submission_id, &submitted_at, &form, None, success)
                     .render()
@@ -944,13 +959,8 @@ async fn submission_edit_post(
     let new_song = match parse_song_form(&form) {
         Ok(v) => v,
         Err(err) => {
-            let tpl = submission_detail_template(
-                &submission_id,
-                &submitted_at,
-                &form,
-                Some(err),
-                None,
-            );
+            let tpl =
+                submission_detail_template(&submission_id, &submitted_at, &form, Some(err), None);
             return Html(tpl.render().unwrap_or_else(|e| e.to_string())).into_response();
         }
     };
@@ -984,13 +994,8 @@ async fn submission_approve_post(
     let new_song = match parse_song_form(&form) {
         Ok(v) => v,
         Err(err) => {
-            let tpl = submission_detail_template(
-                &submission_id,
-                &submitted_at,
-                &form,
-                Some(err),
-                None,
-            );
+            let tpl =
+                submission_detail_template(&submission_id, &submitted_at, &form, Some(err), None);
             return Html(tpl.render().unwrap_or_else(|e| e.to_string())).into_response();
         }
     };

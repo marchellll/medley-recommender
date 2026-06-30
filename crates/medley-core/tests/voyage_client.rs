@@ -16,12 +16,7 @@ async fn voyage_embeds_and_normalizes_vectors() {
         .mount(&server)
         .await;
 
-    let client = VoyageClient::new(
-        "test-key".into(),
-        "voyage-4-large".into(),
-        2,
-        server.uri(),
-    );
+    let client = VoyageClient::new("test-key".into(), "voyage-4-large".into(), 2, server.uri());
 
     let vectors = client
         .embed(&["hello".into()], InputType::Document)
@@ -43,12 +38,7 @@ async fn voyage_surfaces_api_errors() {
         .mount(&server)
         .await;
 
-    let client = VoyageClient::new(
-        "bad-key".into(),
-        "voyage-4-large".into(),
-        4,
-        server.uri(),
-    );
+    let client = VoyageClient::new("bad-key".into(), "voyage-4-large".into(), 4, server.uri());
 
     let err = client
         .embed(&["hello".into()], InputType::Query)

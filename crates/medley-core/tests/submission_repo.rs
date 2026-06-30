@@ -1,8 +1,8 @@
 use chrono::Utc;
 use medley_core::domain::id::new_song_id;
 use medley_core::domain::models::{NewSong, SongSubmission, SubmissionListQuery};
-use medley_core::repo::submission_sqlite::SubmissionRepository;
 use medley_core::repo::sqlite::SqliteSongRepository;
+use medley_core::repo::submission_sqlite::SubmissionRepository;
 use tempfile::TempDir;
 
 async fn setup() -> (TempDir, SubmissionRepository, SqliteSongRepository) {
@@ -57,7 +57,9 @@ async fn update_changes_fields() {
     let id = submission.submission_id.clone();
     repo.insert(&submission).await.unwrap();
 
-    repo.update(&id, &sample_new_song("upd12345678")).await.unwrap();
+    repo.update(&id, &sample_new_song("upd12345678"))
+        .await
+        .unwrap();
     let fetched = repo.get(&id).await.unwrap().unwrap();
     assert_eq!(fetched.title, "Updated");
     assert_eq!(fetched.bpm, 100.0);
@@ -66,7 +68,9 @@ async fn update_changes_fields() {
 #[tokio::test]
 async fn duplicate_youtube_url_rejected_by_db() {
     let (_dir, repo, _songs) = setup().await;
-    repo.insert(&sample_submission("dup12345678")).await.unwrap();
+    repo.insert(&sample_submission("dup12345678"))
+        .await
+        .unwrap();
     let mut second = sample_submission("dup12345678");
     second.submission_id = new_song_id();
     assert!(repo.insert(&second).await.is_err());

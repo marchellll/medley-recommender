@@ -1,10 +1,10 @@
 use axum::{
-    Json, Router,
     extract::{Path, Query, State},
     http::StatusCode,
     middleware,
     response::{IntoResponse, Response},
-    routing::{get, post, patch},
+    routing::{get, patch, post},
+    Json, Router,
 };
 use medley_core::domain::error::AppError;
 use medley_core::domain::models::{NewSong, SearchQuery, SongListQuery, SongPatch};
@@ -25,8 +25,8 @@ impl From<AppError> for ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let status = StatusCode::from_u16(self.0.status_code())
-            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        let status =
+            StatusCode::from_u16(self.0.status_code()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         if status.is_server_error() {
             tracing::error!(status = %status, error = %self.0, "api request failed");
         } else if status.is_client_error() {
@@ -49,17 +49,12 @@ pub fn api_router(state: AppState) -> Router {
             http_rate_limit_middleware,
         ));
 
-    let admin = Router::new()
-        .route("/api/songs", post(create_song))
-        .route(
-            "/api/songs/{song_id}",
-            patch(update_song).delete(delete_song),
-        );
+    let admin = Router::new().route("/api/songs", post(create_song)).route(
+        "/api/songs/{song_id}",
+        patch(update_song).delete(delete_song),
+    );
 
-    Router::new()
-        .merge(public)
-        .merge(admin)
-        .with_state(state)
+    Router::new().merge(public).merge(admin).with_state(state)
 }
 
 pub async fn health() -> &'static str {
@@ -77,9 +72,7 @@ async fn api_login(
     Json(body): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, AuthRejection> {
     if !state.admin_auth.enabled() {
-        return Err(AuthRejection::service_unavailable(
-            "ADMIN_TOKEN is not set",
-        ));
+        return Err(AuthRejection::service_unavailable("ADMIN_TOKEN is not set"));
     }
     if !state.admin_auth.verify_login(&body.token) {
         return Err(AuthRejection::unauthorized("invalid admin token"));

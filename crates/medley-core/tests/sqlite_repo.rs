@@ -1,8 +1,8 @@
 use chrono::Utc;
 use medley_core::domain::id::new_song_id;
 use medley_core::domain::models::{Song, SongListQuery};
-use medley_core::repo::SongRepository;
 use medley_core::repo::sqlite::SqliteSongRepository;
+use medley_core::repo::SongRepository;
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -136,12 +136,7 @@ async fn legacy_youtube_ids_migrated_to_uuid() {
 
     repo.migrate().await.unwrap();
 
-    assert!(
-        repo.get("youtube/legacy12345")
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(repo.get("youtube/legacy12345").await.unwrap().is_none());
     let song = repo
         .get_by_youtube_url("https://www.youtube.com/watch?v=legacy12345")
         .await
@@ -156,10 +151,12 @@ async fn migration_normalizes_youtube_urls() {
     let dir = tempfile::tempdir().unwrap();
     let db_path = dir.path().join("medley.db");
     sqlx::migrate!("./migrations")
-        .run(&sqlx::sqlite::SqlitePoolOptions::new()
-            .connect(&format!("sqlite:{}?mode=rwc", db_path.display()))
-            .await
-            .unwrap())
+        .run(
+            &sqlx::sqlite::SqlitePoolOptions::new()
+                .connect(&format!("sqlite:{}?mode=rwc", db_path.display()))
+                .await
+                .unwrap(),
+        )
         .await
         .unwrap();
 

@@ -1,7 +1,7 @@
 use std::path::Path;
 
-use medley_core::repo::SongRepository;
 use medley_core::repo::sqlite::SqliteSongRepository;
+use medley_core::repo::SongRepository;
 
 #[tokio::test]
 #[ignore = "requires committed data/medley.db"]
@@ -16,10 +16,12 @@ async fn migrate_preserves_existing_medley_db() {
     std::fs::copy(source, &db_path).unwrap();
 
     let count_before: (i64,) = sqlx::query_as("SELECT COUNT(1) FROM songs")
-        .fetch_one(&sqlx::sqlite::SqlitePoolOptions::new()
-            .connect(&format!("sqlite:{}?mode=ro", db_path.display()))
-            .await
-            .unwrap())
+        .fetch_one(
+            &sqlx::sqlite::SqlitePoolOptions::new()
+                .connect(&format!("sqlite:{}?mode=ro", db_path.display()))
+                .await
+                .unwrap(),
+        )
         .await
         .unwrap();
 
@@ -46,7 +48,10 @@ async fn migrate_preserves_existing_medley_db() {
         })
         .await
         .unwrap();
-    assert!(!page.items.is_empty(), "expected songs to remain readable after migrate");
+    assert!(
+        !page.items.is_empty(),
+        "expected songs to remain readable after migrate"
+    );
     assert!(
         uuid::Uuid::parse_str(&page.items[0].song_id).is_ok(),
         "expected UUID v7 song ids after migrate"

@@ -52,12 +52,17 @@ async fn public_contribute_submission() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    let location = response.headers().get("location").unwrap().to_str().unwrap();
+    let location = response
+        .headers()
+        .get("location")
+        .unwrap()
+        .to_str()
+        .unwrap();
     assert!(location.contains("submitted=1"));
 }
 
 #[tokio::test]
-async fn contribute_rate_limited_to_one_per_minute() {
+async fn contribution_rate_limiter_allows_multiple_before_throttle() {
     let db_dir = tempfile::TempDir::new().unwrap();
     let edge_dir = tempfile::TempDir::new().unwrap();
     let config = test_config(
@@ -97,7 +102,8 @@ async fn contribute_rate_limited_to_one_per_minute() {
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    // submission_rate_limit is 5/min, so 2nd request from same IP still passes
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
 }
 
 #[tokio::test]

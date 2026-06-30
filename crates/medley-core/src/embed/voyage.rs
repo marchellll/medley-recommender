@@ -59,7 +59,11 @@ impl EmbeddingProvider for VoyageClient {
         self.dimension
     }
 
-    async fn embed(&self, texts: &[String], input_type: InputType) -> Result<Vec<Vec<f32>>, AppError> {
+    async fn embed(
+        &self,
+        texts: &[String],
+        input_type: InputType,
+    ) -> Result<Vec<Vec<f32>>, AppError> {
         if texts.is_empty() {
             return Ok(vec![]);
         }
