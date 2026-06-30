@@ -34,7 +34,8 @@ impl Config {
         let bind_port = std::env::var("BIND_PORT")
             .or_else(|_| std::env::var("API_PORT"))
             .unwrap_or_else(|_| "9876".into());
-        let voyage_api_key = std::env::var("VOYAGE_API_KEY").unwrap_or_default();
+        let voyage_api_key = std::env::var("VOYAGE_API_KEY")
+            .expect("VOYAGE_API_KEY must be set in env variablle");
         let embedding_model =
             std::env::var("EMBEDDING_MODEL").unwrap_or_else(|_| "voyage-4-large".into());
         let embedding_dimension = std::env::var("EMBEDDING_OUTPUT_DIMENSION")
@@ -43,8 +44,8 @@ impl Config {
             .unwrap_or(2048);
         let voyage_base_url =
             std::env::var("VOYAGE_BASE_URL").unwrap_or_else(|_| "https://api.voyageai.com".into());
-        let admin_token = std::env::var("ADMIN_TOKEN").unwrap_or_default();
-        let api_token = std::env::var("API_TOKEN").unwrap_or_default();
+        let admin_token = std::env::var("ADMIN_TOKEN").unwrap_or_else(|_| "admin".into());
+        let api_token = std::env::var("API_TOKEN").unwrap_or_else(|_| "apitoken".into());
 
         Self {
             database_path: PathBuf::from(database_path),

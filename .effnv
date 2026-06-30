@@ -1,0 +1,24 @@
+# Database
+DATABASE_PATH=data/medley.db
+EDGE_SHARD_PATH=data/edge_shard
+TEXT_INDEX_PATH=data/text_index
+
+##################
+## Server
+##################
+BIND_HOST=0.0.0.0
+BIND_PORT=9876
+
+# Auth
+ADMIN_TOKEN=admin
+API_TOKEN=admin
+
+##################
+# Voyage AI Embeddings
+##################
+VOYAGE_API_KEY=pa-dzIO8_fx71weLekxIpJIgctOkdQZ84P84tlJ8SsoPuE
+EMBEDDING_MODEL=voyage-4-large
+EMBEDDING_OUTPUT_DIMENSION=2048
+
+# Logging (also respects RUST_LOG)
+LOG_LEVEL=info
