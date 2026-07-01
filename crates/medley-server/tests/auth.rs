@@ -165,7 +165,7 @@ async fn rate_limits_unauthenticated_queries() {
     );
     let app = test_app(build_state(&config).await.unwrap());
 
-    for _ in 0..10 {
+    for _ in 0..30 {
         let response = oneshot(
             app.clone(),
             Request::builder()

@@ -12,7 +12,7 @@ use medley_core::domain::pagination::CursorPage;
 use serde::Serialize;
 
 use crate::auth::{AdminUser, AuthRejection, LoginRequest, LoginResponse};
-use crate::rate_limit::http_rate_limit_middleware;
+use crate::rate_limit::api_rate_limit_middleware;
 use crate::state::AppState;
 
 struct ApiError(AppError);
@@ -46,7 +46,7 @@ pub fn api_router(state: AppState) -> Router {
         .route("/api/auth/logout", post(api_logout))
         .layer(middleware::from_fn_with_state(
             state.clone(),
-            http_rate_limit_middleware,
+            api_rate_limit_middleware,
         ));
 
     let admin = Router::new().route("/api/songs", post(create_song)).route(

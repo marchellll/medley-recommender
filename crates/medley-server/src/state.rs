@@ -15,7 +15,9 @@ pub struct AppState {
     pub admin_auth: Arc<AdminAuth>,
     pub mcp_auth: Arc<McpAuth>,
     pub rate_limit: Arc<RateLimiter>,
+    pub api_rate_limit: Arc<RateLimiter>,
     pub submission_rate_limit: Arc<RateLimiter>,
+    pub ui_rate_limit: Arc<RateLimiter>,
 }
 
 impl AppState {
@@ -26,7 +28,9 @@ impl AppState {
         admin_auth: Arc<AdminAuth>,
         mcp_auth: Arc<McpAuth>,
         rate_limit: Arc<RateLimiter>,
+        api_rate_limit: Arc<RateLimiter>,
         submission_rate_limit: Arc<RateLimiter>,
+        ui_rate_limit: Arc<RateLimiter>,
     ) -> Self {
         Self {
             songs,
@@ -35,7 +39,9 @@ impl AppState {
             admin_auth,
             mcp_auth,
             rate_limit,
+            api_rate_limit,
             submission_rate_limit,
+            ui_rate_limit,
         }
     }
 

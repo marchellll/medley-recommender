@@ -89,7 +89,7 @@ pub fn client_ip<B>(req: &Request<B>) -> IpAddr {
         .unwrap_or(IpAddr::from([127, 0, 0, 1]))
 }
 
-pub async fn http_rate_limit_middleware(
+pub async fn api_rate_limit_middleware(
     State(state): State<AppState>,
     req: Request<Body>,
     next: Next,
@@ -99,10 +99,10 @@ pub async fn http_rate_limit_middleware(
     }
 
     let ip = client_ip(&req);
-    if state.rate_limit.check(ip).is_err() {
+    if state.api_rate_limit.check(ip).is_err() {
         return (
             StatusCode::TOO_MANY_REQUESTS,
-            Json(serde_json::json!({ "error": state.rate_limit.limit_message() })),
+            Json(serde_json::json!({ "error": state.api_rate_limit.limit_message() })),
         )
             .into_response();
     }
@@ -120,6 +120,27 @@ pub async fn submission_rate_limit_middleware(
         return (
             StatusCode::TOO_MANY_REQUESTS,
             Json(serde_json::json!({ "error": state.submission_rate_limit.limit_message() })),
+        )
+            .into_response();
+    }
+
+    next.run(req).await
+}
+
+pub async fn ui_rate_limit_middleware(
+    State(state): State<AppState>,
+    req: Request<Body>,
+    next: Next,
+) -> Response {
+    if optional_admin_from_request(&req, &state.admin_auth) {
+        return next.run(req).await;
+    }
+
+    let ip = client_ip(&req);
+    if state.ui_rate_limit.check(ip).is_err() {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(serde_json::json!({ "error": state.ui_rate_limit.limit_message() })),
         )
             .into_response();
     }

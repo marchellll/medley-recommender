@@ -109,7 +109,9 @@ pub async fn build_state(config: &Config) -> anyhow::Result<AppState> {
         Arc::new(AdminAuth::new(config.admin_token.clone())),
         Arc::new(McpAuth::new(config.api_token.clone())),
         Arc::new(RateLimiter::default()),
+        Arc::new(RateLimiter::per_minute(30)),
         Arc::new(RateLimiter::per_minute(5)),
+        Arc::new(RateLimiter::per_minute(200)),
     ))
 }
 

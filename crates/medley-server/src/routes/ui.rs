@@ -13,7 +13,7 @@ use axum::{
 use medley_core::domain::models::{NewSong, SearchQuery, SongListQuery, SubmissionListQuery};
 
 use crate::auth::{admin_cookie_value, clear_admin_cookie, optional_admin_from_request, AdminUser};
-use crate::rate_limit::{http_rate_limit_middleware, submission_rate_limit_middleware};
+use crate::rate_limit::{submission_rate_limit_middleware, ui_rate_limit_middleware};
 use crate::state::AppState;
 
 #[derive(Template)]
@@ -118,7 +118,7 @@ pub fn ui_router(state: AppState) -> Router {
         .route("/logout", post(logout_post))
         .layer(middleware::from_fn_with_state(
             state.clone(),
-            http_rate_limit_middleware,
+            ui_rate_limit_middleware,
         ));
 
     let contribute_post = Router::new()
@@ -129,7 +129,7 @@ pub fn ui_router(state: AppState) -> Router {
         ))
         .layer(middleware::from_fn_with_state(
             state.clone(),
-            http_rate_limit_middleware,
+            ui_rate_limit_middleware,
         ));
 
     let admin = Router::new()
