@@ -8,7 +8,8 @@ edition = "2021"
 license = "MIT"
 
 [workspace.metadata.release]
-tag-prefix = "v"
+tag-prefix = ""
+tag-name = "v{{version}}"
 
 [workspace.dependencies]
 anyhow = "1"
